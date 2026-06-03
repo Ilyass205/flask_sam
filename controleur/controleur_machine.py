@@ -11,7 +11,16 @@ Rôles et droits :
 
 from flask import render_template, jsonify, request, session, redirect, url_for
 from modele.Supervision import Supervision
-from controleur.validators import valide_nom, valide_id
+from controleur.validators import (
+    ValidationError,
+    get_json_payload,
+    normalise_int,
+    normalise_string,
+    validation_message,
+    valide_date,
+    valide_id,
+    valide_nom,
+)
 
 
 class ControleurMachine:
@@ -67,17 +76,26 @@ class ControleurMachine:
         if not self._est_admin_ou_tech():
             return jsonify({"success": False, "message": "Accès refusé"}), 403
 
-        data         = request.get_json(silent=True) or {}
-        nom          = data.get('nom', '').strip()
-        type_m       = data.get('type_machine', '').strip()
-        date_install = data.get('date_installation') or None
-        id_empl      = data.get('id_emplacement')
-        # aruco_id peut être None si non renseigné — c'est ok
-        aruco_raw    = data.get('aruco_id')
-        aruco_id     = int(aruco_raw) if aruco_raw not in (None, '', 'null') else None
+        try:
+            data = get_json_payload(
+                request,
+                {'nom', 'type_machine', 'date_installation', 'id_emplacement', 'aruco_id'},
+                {'nom', 'id_emplacement'}
+            )
+            nom          = normalise_string(data.get('nom'), 'nom', min_len=3, max_len=50)
+            type_m       = normalise_string(data.get('type_machine', ''), 'type_machine', min_len=0, max_len=50)
+            date_install = data.get('date_installation') or None
+            id_empl      = normalise_int(data.get('id_emplacement'), 'id_emplacement')
+            aruco_id     = normalise_int(data.get('aruco_id'), 'aruco_id', min_value=0, allow_none=True)
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
 
-        if not nom or not id_empl:
-            return jsonify({"success": False, "message": "nom et id_emplacement requis"}), 400
+        if not valide_nom(nom) or not valide_id(id_empl):
+            return jsonify({"success": False, "message": "Données machine invalides"}), 400
+        if type_m and not valide_nom(type_m, min_len=1, max_len=50):
+            return jsonify({"success": False, "message": "Type machine invalide"}), 400
+        if date_install and not valide_date(date_install):
+            return jsonify({"success": False, "message": "Date installation invalide"}), 400
 
         model  = Supervision(self.mysql)
         new_id = model.ajouter_machine(nom, type_m, date_install, id_empl, aruco_id)
@@ -94,16 +112,26 @@ class ControleurMachine:
         if not self._est_admin_ou_tech():
             return jsonify({"success": False, "message": "Accès refusé"}), 403
 
-        data         = request.get_json(silent=True) or {}
-        nom          = data.get('nom', '').strip()
-        type_m       = data.get('type_machine', '').strip()
-        date_install = data.get('date_installation') or None
-        id_empl      = data.get('id_emplacement')
-        aruco_raw    = data.get('aruco_id')
-        aruco_id     = int(aruco_raw) if aruco_raw not in (None, '', 'null') else None
+        try:
+            data = get_json_payload(
+                request,
+                {'nom', 'type_machine', 'date_installation', 'id_emplacement', 'aruco_id'},
+                {'nom', 'id_emplacement'}
+            )
+            nom          = normalise_string(data.get('nom'), 'nom', min_len=3, max_len=50)
+            type_m       = normalise_string(data.get('type_machine', ''), 'type_machine', min_len=0, max_len=50)
+            date_install = data.get('date_installation') or None
+            id_empl      = normalise_int(data.get('id_emplacement'), 'id_emplacement')
+            aruco_id     = normalise_int(data.get('aruco_id'), 'aruco_id', min_value=0, allow_none=True)
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
 
-        if not nom or not id_empl:
-            return jsonify({"success": False, "message": "nom et id_emplacement requis"}), 400
+        if not valide_nom(nom) or not valide_id(id_empl):
+            return jsonify({"success": False, "message": "Données machine invalides"}), 400
+        if type_m and not valide_nom(type_m, min_len=1, max_len=50):
+            return jsonify({"success": False, "message": "Type machine invalide"}), 400
+        if date_install and not valide_date(date_install):
+            return jsonify({"success": False, "message": "Date installation invalide"}), 400
 
         model = Supervision(self.mysql)
         ok    = model.modifier_machine(id_machine, nom, type_m, date_install, id_empl, aruco_id)

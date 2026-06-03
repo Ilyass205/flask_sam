@@ -15,7 +15,10 @@ Pourquoi séparé:
     - Templates erreurs/ déjà préparés
 """
 
-from flask import render_template
+import logging
+from flask import jsonify, render_template, request
+
+log = logging.getLogger('ERRORS')
 
 
 class ControleurErreurs:
@@ -37,6 +40,22 @@ class ControleurErreurs:
     # Handlers d'erreur
     # ────────────────────────────────────────────────────────────────
 
+    def _veut_json(self):
+        return request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json'
+
+    def _reponse_erreur(self, code, message, template=None):
+        if self._veut_json():
+            return jsonify({"success": False, "message": message}), code
+        if template:
+            return render_template(template), code
+        return render_template('erreurs/500.html'), code
+
+    def erreur_400(self, e):
+        return self._reponse_erreur(400, "Requête invalide")
+
+    def erreur_403(self, e):
+        return self._reponse_erreur(403, "Accès refusé")
+
     def erreur_404(self, e):
         """
         Handler d'erreur 404 (page non trouvée).
@@ -53,7 +72,10 @@ class ControleurErreurs:
         Template:
             templates/erreurs/404.html
         """
-        return render_template('erreurs/404.html'), 404
+        return self._reponse_erreur(404, "Ressource introuvable", 'erreurs/404.html')
+
+    def erreur_405(self, e):
+        return self._reponse_erreur(405, "Méthode non autorisée")
 
     def erreur_500(self, e):
         """
@@ -71,4 +93,5 @@ class ControleurErreurs:
         Template:
             templates/erreurs/500.html
         """
-        return render_template('erreurs/500.html'), 500
+        log.exception("Erreur serveur non gérée")
+        return self._reponse_erreur(500, "Erreur interne du serveur", 'erreurs/500.html')

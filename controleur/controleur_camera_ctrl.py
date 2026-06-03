@@ -2,6 +2,13 @@
 import requests
 from flask import jsonify, request
 from logger import get_logger
+from controleur.validators import (
+    ValidationError,
+    get_json_payload,
+    normalise_int,
+    require_choice,
+    validation_message,
+)
 
 log = get_logger('CAM_CTRL')
 
@@ -39,9 +46,17 @@ class ControleurCameraCtrl:
     # ── PTZ ───────────────────────────────────────────────────────
 
     def api_ptz(self, id_camera):
-        data  = request.get_json(silent=True) or {}
-        op    = data.get('op', 'Stop')
-        speed = data.get('speed', 10)
+        try:
+            data  = get_json_payload(request, {'op', 'speed'})
+            op    = require_choice(data.get('op', 'Stop'), 'op', [
+                'Stop', 'Left', 'Right', 'Up', 'Down',
+                'LeftUp', 'LeftDown', 'RightUp', 'RightDown',
+                'ZoomIn', 'ZoomOut', 'FocusNear', 'FocusFar'
+            ])
+            speed = normalise_int(data.get('speed', 10), 'speed', min_value=1, max_value=64)
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
         ip, pwd = self._get_cam_ip(id_camera)
         if not ip:
             return jsonify({"success": False, "message": "Caméra introuvable"}), 404
@@ -56,8 +71,12 @@ class ControleurCameraCtrl:
     # ── IR (mode nuit) ────────────────────────────────────────────
 
     def api_ir(self, id_camera):
-        data  = request.get_json(silent=True) or {}
-        state = data.get('state', 'Auto')
+        try:
+            data  = get_json_payload(request, {'state'})
+            state = require_choice(data.get('state', 'Auto'), 'state', ['Auto', 'Off', 'On'])
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
         ip, pwd = self._get_cam_ip(id_camera)
         if not ip:
             return jsonify({"success": False}), 404
@@ -79,13 +98,19 @@ class ControleurCameraCtrl:
             state = res[0]['value']['IrLights']['state']
             return jsonify({"success": True, "state": state})
         except Exception as e:
-            return jsonify({"success": False, "error": str(e)})
+            log.error(f"IR get cam {id_camera} : {e}")
+            return jsonify({"success": False, "message": "Erreur caméra"}), 502
 
     # ── FloodLight (vrai flash) ───────────────────────────────────
 
     def api_led(self, id_camera):
-        data  = request.get_json(silent=True) or {}
-        state = 1 if data.get('state') == 'On' else 0
+        try:
+            data = get_json_payload(request, {'state'}, {'state'})
+            state_label = require_choice(data.get('state'), 'state', ['On', 'Off'])
+            state = 1 if state_label == 'On' else 0
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
         ip, pwd = self._get_cam_ip(id_camera)
         if not ip:
             return jsonify({"success": False}), 404
@@ -123,7 +148,8 @@ class ControleurCameraCtrl:
             state = res2[0]['value']['PowerLed']['state']
             return jsonify({"success": True, "state": state})
         except Exception as e:
-            return jsonify({"success": False, "error": str(e)})
+            log.error(f"LED get cam {id_camera} : {e}")
+            return jsonify({"success": False, "message": "Erreur caméra"}), 502
 
     # ── Snap (capture photo) ──────────────────────────────────────
 
@@ -142,7 +168,8 @@ class ControleurCameraCtrl:
                     headers={"Content-Disposition": f"attachment; filename=snap_cam{id_camera}.jpg"})
             return jsonify({"success": False, "message": "Pas d'image"})
         except Exception as e:
-            return jsonify({"success": False, "error": str(e)})
+            log.error(f"Snap cam {id_camera} : {e}")
+            return jsonify({"success": False, "message": "Erreur caméra"}), 502
 
     # ── Paramètres image ──────────────────────────────────────────
 
@@ -156,19 +183,30 @@ class ControleurCameraCtrl:
                 return jsonify({"success": True, "image": res[0]['value']['Image']})
             return jsonify({"success": False})
         except Exception as e:
-            return jsonify({"success": False, "error": str(e)})
+            log.error(f"Image get cam {id_camera} : {e}")
+            return jsonify({"success": False, "message": "Erreur caméra"}), 502
 
     def api_image_set(self, id_camera):
-        data = request.get_json(silent=True) or {}
+        try:
+            data = get_json_payload(request, {'bright', 'contrast', 'saturation', 'sharpness'})
+            image_settings = {
+                "bright": normalise_int(data.get('bright', 128), 'bright', min_value=0, max_value=255),
+                "contrast": normalise_int(data.get('contrast', 128), 'contrast', min_value=0, max_value=255),
+                "saturation": normalise_int(data.get('saturation', 128), 'saturation', min_value=0, max_value=255),
+                "sharpness": normalise_int(data.get('sharpness', 128), 'sharpness', min_value=0, max_value=255),
+            }
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
         ip, pwd = self._get_cam_ip(id_camera)
         if not ip:
             return jsonify({"success": False}), 404
         payload = [{"cmd": "SetImage", "action": 0, "param": {"Image": {
             "channel":    0,
-            "bright":     data.get('bright', 128),
-            "contrast":   data.get('contrast', 128),
-            "saturation": data.get('saturation', 128),
-            "sharpness":  data.get('sharpness', 128),
+            "bright":     image_settings["bright"],
+            "contrast":   image_settings["contrast"],
+            "saturation": image_settings["saturation"],
+            "sharpness":  image_settings["sharpness"],
         }}}]
         res = self._reolink_post(ip, pwd, payload)
         ok  = res and res[0].get('code') == 0

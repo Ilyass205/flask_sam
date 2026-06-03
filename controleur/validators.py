@@ -16,6 +16,79 @@ Pourquoi:
 """
 
 import re
+from ipaddress import ip_address
+from urllib.parse import urlparse
+
+
+class ValidationError(ValueError):
+    """Erreur de validation destinée aux réponses HTTP 400."""
+
+
+def get_json_payload(req, allowed_fields, required_fields=()):
+    """
+    Charge un body JSON objet et rejette les champs inattendus.
+    """
+    data = req.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ValidationError("Corps JSON invalide")
+
+    allowed = set(allowed_fields)
+    unexpected = sorted(set(data) - allowed)
+    if unexpected:
+        raise ValidationError("Champs non autorisés: " + ", ".join(unexpected))
+
+    missing = [field for field in required_fields if data.get(field) in (None, '')]
+    if missing:
+        raise ValidationError("Champs requis: " + ", ".join(missing))
+
+    return data
+
+
+def normalise_string(value, field, min_len=1, max_len=100, allow_none=False):
+    if value is None and allow_none:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError(f"{field} doit être une chaîne")
+    value = value.strip()
+    if len(value) < min_len or len(value) > max_len:
+        raise ValidationError(f"{field} doit contenir entre {min_len} et {max_len} caractères")
+    return value
+
+
+def normalise_int(value, field, min_value=1, max_value=None, allow_none=False):
+    if value in (None, '') and allow_none:
+        return None
+    if isinstance(value, bool):
+        raise ValidationError(f"{field} doit être un entier")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise ValidationError(f"{field} doit être un entier")
+    if parsed < min_value:
+        raise ValidationError(f"{field} doit être supérieur ou égal à {min_value}")
+    if max_value is not None and parsed > max_value:
+        raise ValidationError(f"{field} doit être inférieur ou égal à {max_value}")
+    return parsed
+
+
+def require_choice(value, field, choices):
+    if value not in choices:
+        raise ValidationError(f"{field} invalide")
+    return value
+
+
+def validation_message(message):
+    return {"success": False, "message": message}
+
+
+def valide_login(login):
+    if not login or not isinstance(login, str):
+        return False
+    return bool(re.match(r'^[a-zA-Z0-9_.@-]{3,50}$', login.strip()))
+
+
+def valide_mot_de_passe(mdp):
+    return isinstance(mdp, str) and 8 <= len(mdp) <= 128
 
 
 def valide_ip(ip):
@@ -46,20 +119,36 @@ def valide_ip(ip):
     
     # URL complète (RTSP ou HTTP)
     if ip.startswith('rtsp://') or ip.startswith('http://') or ip.startswith('https://'):
-        return True
-    
-    # IP brute: valider avec regex
-    # Pattern: \d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}
-    pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
-    if re.match(pattern, ip):
-        parts = ip.split('.')
-        try:
-            # Vérifier que chaque octet est 0-255
-            return all(0 <= int(part) <= 255 for part in parts)
-        except ValueError:
+        parsed = urlparse(ip)
+        if parsed.scheme not in ('rtsp', 'http', 'https') or not parsed.hostname:
             return False
+        if parsed.port is not None and not valide_port(parsed.port):
+            return False
+        return _valide_host(parsed.hostname)
+
+    return _valide_host(ip)
+
+
+def _valide_host(host):
+    if not host or not isinstance(host, str):
+        return False
+    host = host.strip()
+
+    try:
+        ip_address(host)
+        return True
+    except ValueError:
+        pass
+
+    if re.match(r'^(\d{1,3}\.){3}\d{1,3}$', host):
+        return False
     
-    return False
+    if len(host) > 253:
+        return False
+    if host.lower() == 'localhost':
+        return True
+    hostname = r'^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$'
+    return bool(re.match(hostname, host))
 
 
 def valide_nom(nom, min_len=3, max_len=50):
@@ -98,7 +187,7 @@ def valide_nom(nom, min_len=3, max_len=50):
     
     # Regex: lettres (a-z, A-Z), chiffres, espaces, tirets, underscores
     # Exclure: <, >, ", ', ;, /, \, etc.
-    pattern = r'^[a-zA-Z0-9\s\-_éèêëàâäùûüôöç]+$'
+    pattern = r'^[a-zA-Z0-9\s\-_éèêëÉÈÊËÀÂÄÙÛÜÔÖÇ]+$'
     return bool(re.match(pattern, nom))
 
 
