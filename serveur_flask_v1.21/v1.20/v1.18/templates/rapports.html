@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapports – JOGAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+    <style>
+        .rapports-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:16px; margin-top:16px; }
+        .rapport-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--rl);
+                        padding:22px; box-shadow:var(--sh-s); display:flex; flex-direction:column; gap:12px; }
+        .rc-icon { width:44px; height:44px; border-radius:10px; display:flex; align-items:center;
+                   justify-content:center; font-size:20px; flex-shrink:0; }
+        .rc-csv  { background:var(--green-bg); color:var(--green); }
+        .rc-pdf  { background:var(--red-bg);   color:var(--red); }
+        .rc-view { background:var(--accent-bg); color:var(--accent); }
+        .rapport-card h3 { font-size:14.5px; font-weight:700; color:var(--text); margin:0; }
+        .rapport-card p  { font-size:12.5px; color:var(--text-2); margin:0; line-height:1.5; flex:1; }
+        .section-sep { margin:28px 0 8px; font-size:11px; font-weight:700; letter-spacing:1px;
+                       text-transform:uppercase; color:var(--text-muted); }
+    </style>
+</head>
+<body>
+{% include 'header.html' %}
+
+    <div class="section-header">
+        <div class="section-title"><i class="fa-solid fa-file-chart-column"></i> Rapports</div>
+    </div>
+
+    <div class="section-sep">Rapport complet</div>
+    <div class="rapports-grid">
+        <div class="rapport-card">
+            <div class="rc-icon rc-csv"><i class="fa-solid fa-file-csv"></i></div>
+            <h3>Rapport complet — CSV</h3>
+            <p>États machines + historique événements + alertes dans un seul fichier. Compatible Excel.</p>
+            <a href="/rapports/csv/complet" class="btn btn-primary btn-sm">
+                <i class="fa-solid fa-download"></i> Télécharger CSV complet
+            </a>
+        </div>
+        <div class="rapport-card">
+            <div class="rc-icon rc-pdf"><i class="fa-solid fa-file-pdf"></i></div>
+            <h3>Rapport complet — PDF</h3>
+            <p>Rapport mis en page avec tableaux colorés, prêt à imprimer ou partager.</p>
+            <a href="/rapports/pdf" class="btn btn-danger btn-sm">
+                <i class="fa-solid fa-download"></i> Télécharger PDF
+            </a>
+        </div>
+        <div class="rapport-card">
+            <div class="rc-icon rc-view"><i class="fa-solid fa-eye"></i></div>
+            <h3>Aperçu navigateur</h3>
+            <p>Visualise le rapport HTML directement. Ctrl+P pour imprimer en PDF depuis le navigateur.</p>
+            <a href="/rapports/apercu" target="_blank" class="btn btn-ghost btn-sm">
+                <i class="fa-solid fa-external-link"></i> Ouvrir l'aperçu
+            </a>
+        </div>
+    </div>
+
+    <div class="section-sep">Exports individuels</div>
+    <div class="rapports-grid">
+        <div class="rapport-card">
+            <div class="rc-icon rc-csv"><i class="fa-solid fa-industry"></i></div>
+            <h3>États actuels des machines</h3>
+            <p>Snapshot de l'état courant de chaque machine avec la date du dernier événement.</p>
+            <a href="/rapports/csv/etats" class="btn btn-ghost btn-sm">
+                <i class="fa-solid fa-download"></i> Télécharger CSV
+            </a>
+        </div>
+        <div class="rapport-card">
+            <div class="rc-icon rc-csv"><i class="fa-solid fa-clock-rotate-left"></i></div>
+            <h3>Historique des événements</h3>
+            <p>Tous les changements d'état enregistrés (jusqu'à 500 événements).</p>
+            <a href="/rapports/csv/evenements" class="btn btn-ghost btn-sm">
+                <i class="fa-solid fa-download"></i> Télécharger CSV
+            </a>
+        </div>
+        <div class="rapport-card">
+            <div class="rc-icon rc-csv"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3>Alertes</h3>
+            <p>Toutes les alertes enregistrées avec leur date et la machine concernée.</p>
+            <a href="/rapports/csv/alertes" class="btn btn-ghost btn-sm">
+                <i class="fa-solid fa-download"></i> Télécharger CSV
+            </a>
+        </div>
+    </div>
+
+    <div class="info-card" style="margin-top:28px;max-width:520px;">
+        <div class="info-card-title"><i class="fa-solid fa-circle-info"></i> Note PDF</div>
+        <p style="font-size:12.5px;color:var(--text-2);line-height:1.6;">
+            Le PDF nécessite <strong>weasyprint</strong> installé sur la machine.<br>
+            Sans weasyprint, le bouton télécharge un HTML imprimable (même résultat via Ctrl+P).<br>
+            Installation :
+            <code style="background:var(--surface-2);padding:2px 7px;border-radius:4px;font-size:11.5px;">
+                pip3 install weasyprint --break-system-packages
+            </code>
+        </p>
+    </div>
+
+{% include 'footer.html' %}
+</body>
+</html>

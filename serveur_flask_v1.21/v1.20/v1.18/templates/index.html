@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard – JOGAM Supervision</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+    {% include 'header.html' %}
+
+    <div class="page-body">
+
+        <!-- Statistiques rapides (à calculer depuis les données) -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-icon si-blue"><i class="fa-solid fa-camera"></i></div>
+                <div>
+                    <div class="stat-value">{{ all_cameras|length }}</div>
+                    <div class="stat-label">Caméras</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon si-green"><i class="fa-solid fa-gear"></i></div>
+                <div>
+                    <div class="stat-value">{{ machines|length }}</div>
+                    <div class="stat-label">Machines</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon si-orange"><i class="fa-solid fa-chart-line"></i></div>
+                <div>
+                    <div class="stat-value">{{ trs_moyen|default('0%') }}</div>
+                    <div class="stat-label">TRS Moyen</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon si-red"><i class="fa-solid fa-bell"></i></div>
+                <div>
+                    <div class="stat-value">{{ alertes_recents|length }}</div>
+                    <div class="stat-label">Alertes (24h)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tableau des associations caméra-machine -->
+        <div class="section-header">
+            <div class="section-title">Caméras & Machines associées</div>
+            <button onclick="ouvrirModal(null)" class="btn btn-primary btn-sm">
+                <i class="fa-solid fa-link"></i> Nouvelle association
+            </button>
+        </div>
+
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Caméra</th>
+                        <th>IP</th>
+                        <th>Protocole</th>
+                        <th>Machine associée</th>
+                        <th>Zone</th>
+                        <th>État</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in associations %}
+                    <tr>
+                        <td>
+                            {% if row.id_machine %}
+                            <a href="{{ url_for('view_camera', id_camera=row.id_camera) }}" class="camera-link">
+                                <i class="fa-solid fa-video"></i> {{ row.nom_camera }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted"><i class="fa-solid fa-video-slash"></i> {{ row.nom_camera }}</span>
+                            {% endif %}
+                        </td>
+                        <td><code class="ip-tag">{{ row.ip_camera }}</code></td>
+                        <td>
+                            <span class="badge-proto p-rtsp">{{ row.protocole_camera }}</span>
+                        </td>
+                        <td>
+                            {% if row.id_machine %}
+                            <strong>{{ row.nom_machine }}</strong><br>
+                            <small class="text-muted">{{ row.type_machine }}</small>
+                            {% else %}
+                            <span class="text-muted">— Aucune —</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.section_emplacement|default('—') }}</td>
+                        <td>
+                            {% if row.id_machine %}
+                            <span class="badge" id="etat-{{ row.id_camera }}-{{ row.id_machine }}"
+                                  data-machine="{{ row.id_machine }}">
+                                ● Chargement…
+                            </span>
+                            {% else %}
+                            <span class="badge b-unknown">Inconnu</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                {% if row.id_machine %}
+                                <a href="{{ url_for('view_camera', id_camera=row.id_camera) }}" class="btn btn-ghost btn-sm" title="Voir le flux">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                <button onclick="dissocier({{ row.id_camera }}, {{ row.id_machine }})" class="btn btn-danger btn-sm" title="Dissocier">
+                                    <i class="fa-solid fa-unlink"></i>
+                                </button>
+                                {% else %}
+                                <button onclick="ouvrirModal({{ row.id_camera }})" class="btn btn-primary btn-sm">
+                                    <i class="fa-solid fa-link"></i> Associer
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not associations %}
+                    <tr>
+                        <td colspan="7" class="empty-state">Aucune caméra en base de données.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Dernières alertes -->
+        <div class="section-header" style="margin-top: 32px;">
+            <div class="section-title">Alertes récentes</div>
+            <a href="{{ url_for('alertes') }}" class="btn btn-ghost btn-sm">Voir tout <i class="fa-solid fa-arrow-right"></i></a>
+        </div>
+        <div class="card">
+            <div class="alert-list">
+                {% for alerte in alertes_recents %}
+                <div class="alert-item">
+                    <div class="alert-icon ai-{{ alerte.type_alerte|default('arret') }}">
+                        <i class="fa-solid fa-exclamation"></i>
+                    </div>
+                    <div class="alert-body">
+                        <div class="alert-title">{{ alerte.type_alerte|title }} – Machine {{ alerte.nom_machine }}</div>
+                        <div class="alert-meta">{{ alerte.date_alerte.strftime('%d/%m/%Y %H:%M') if alerte.date_alerte else '—' }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="empty-state">Aucune alerte récente.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal d'association (identique à celui de l'ancien index) -->
+    <div id="modal-overlay" class="modal-backdrop" onclick="fermerSiExterieur(event)">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Associer une caméra à une machine</div>
+                <button onclick="fermerModal()" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="modal-error" class="modal-error"></div>
+            <div class="form-field">
+                <label class="form-label">Caméra</label>
+                <select id="select-camera" class="form-select">
+                    {% for cam in all_cameras %}
+                    <option value="{{ cam.id_camera }}">{{ cam.nom_camera }} – {{ cam.ip_camera }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Machine</label>
+                <select id="select-machine" class="form-select">
+                    {% for m in machines %}
+                    <option value="{{ m.id_machine }}">{{ m.nom_machine }} ({{ m.type_machine }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-actions">
+                <button onclick="ajouterAssociation()" class="btn btn-primary">Confirmer</button>
+                <button onclick="fermerModal()" class="btn btn-ghost">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Gestion des états machines (même script que précédent)
+        function chargerEtat(el) {
+            fetch(`/api/etat/${el.dataset.machine}`)
+                .then(r => r.json())
+                .then(data => {
+                    const map = {
+                        'marche':      ['b-prod', '● Production'],
+                        'arret':       ['b-arret', '● Arrêt'],
+                        'maintenance': ['b-maint', '● Maintenance']
+                    };
+                    const [cls, label] = map[data.etat_couleur] || ['b-unknown', '● Inconnu'];
+                    el.className = 'badge ' + cls;
+                    el.textContent = label;
+                })
+                .catch(() => {
+                    el.className = 'badge b-unknown';
+                    el.textContent = '● Hors ligne';
+                });
+        }
+
+        document.querySelectorAll('[data-machine]').forEach(chargerEtat);
+        setInterval(() => document.querySelectorAll('[data-machine]').forEach(chargerEtat), 10000);
+
+        // Modal
+        function ouvrirModal(idCamera) {
+            if (idCamera) document.getElementById('select-camera').value = idCamera;
+            document.getElementById('modal-overlay').classList.add('open');
+        }
+        function fermerModal() {
+            document.getElementById('modal-overlay').classList.remove('open');
+        }
+        function fermerSiExterieur(e) {
+            if (e.target === document.getElementById('modal-overlay')) fermerModal();
+        }
+        function ajouterAssociation() {
+            const id_camera = parseInt(document.getElementById('select-camera').value);
+            const id_machine = parseInt(document.getElementById('select-machine').value);
+            fetch('/api/associations', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id_camera, id_machine })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) location.reload();
+                else {
+                    const errDiv = document.getElementById('modal-error');
+                    errDiv.textContent = data.message;
+                    errDiv.style.display = 'block';
+                }
+            })
+            .catch(() => {
+                const errDiv = document.getElementById('modal-error');
+                errDiv.textContent = 'Erreur réseau.';
+                errDiv.style.display = 'block';
+            });
+        }
+        function dissocier(id_camera, id_machine) {
+            if (!confirm('Dissocier cette caméra de la machine ?')) return;
+            fetch(`/api/associations/${id_camera}/${id_machine}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => { if (data.success) location.reload(); else alert(data.message); })
+                .catch(() => alert('Erreur réseau.'));
+        }
+    </script>
+
+    {% include 'footer.html' %}
+</body>
+</html>

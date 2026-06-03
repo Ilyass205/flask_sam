@@ -1,0 +1,96 @@
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script>
+// S'exécute AVANT le rendu pour éviter le flash au chargement
+(function() {
+    if (localStorage.getItem('samv2_light') === '1') {
+        document.documentElement.classList.add('light-mode');
+    }
+})();
+</script>
+
+<nav class="navbar">
+    <a href="{{ url_for('index') }}" class="nav-brand">
+        <i class="fa-solid fa-eye"></i> JOGAM <span class="nav-brand-sub">SAMv2</span>
+    </a>
+    <div class="nav-links">
+        <div class="nav-group">
+            <span class="nav-group-label">Supervision</span>
+            <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+                <i class="fa-solid fa-gauge"></i> Dashboard
+            </a>
+            <a href="{{ url_for('cameras_direct') }}" class="nav-link {% if request.endpoint == 'cameras_direct' %}active{% endif %}">
+                <i class="fa-solid fa-video"></i> Caméras en Direct
+            </a>
+        </div>
+        <div class="nav-group">
+            <span class="nav-group-label">Données</span>
+            <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">
+                <i class="fa-solid fa-clock-rotate-left"></i> Historique
+            </a>
+            <a href="{{ url_for('alertes') }}" class="nav-link {% if request.endpoint == 'alertes' %}active{% endif %}">
+                <i class="fa-solid fa-bell"></i> Alertes
+            </a>
+            <a href="{{ url_for('stats') }}" class="nav-link {% if request.endpoint == 'stats' %}active{% endif %}">
+                <i class="fa-solid fa-chart-line"></i> Statistiques
+            </a>
+            <a href="{{ url_for('rapports') }}" class="nav-link {% if request.endpoint == 'rapports' %}active{% endif %}">
+                <i class="fa-solid fa-file-chart-column"></i> Rapports
+            </a>
+        </div>
+        <div class="nav-group">
+            <span class="nav-group-label">Administration</span>
+            <a href="{{ url_for('machines_config') }}" class="nav-link {% if request.endpoint == 'machines_config' %}active{% endif %}">
+                <i class="fa-solid fa-gears"></i> Machines
+            </a>
+            {% if session.get('role') == 'admin' %}
+            <a href="{{ url_for('users') }}" class="nav-link {% if request.endpoint == 'users' %}active{% endif %}">
+                <i class="fa-solid fa-users"></i> Utilisateurs
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="nav-user">
+        <button id="btn-theme" class="btn btn-ghost btn-sm" title="Mode jour / nuit" style="font-size:15px;padding:6px 10px;">
+            <i class="fa-solid fa-sun" id="theme-icon"></i>
+        </button>
+        <div class="nav-user-info">
+            <div class="nav-avatar">{{ session['utilisateur'][0].upper() if session.get('utilisateur') else '?' }}</div>
+            <div>
+                <div class="nav-username">{{ session.get('utilisateur', '—') }}</div>
+                <div class="nav-role">{{ session.get('role', '') }}</div>
+            </div>
+        </div>
+        <a href="{{ url_for('deconnexionb') }}" class="btn btn-ghost btn-sm" title="Déconnexion">
+            <i class="fa-solid fa-right-from-bracket"></i> Déconnexion
+        </a>
+    </div>
+</nav>
+<main class="main-content">
+
+<script>
+(function() {
+    var isLight = localStorage.getItem('samv2_light') === '1';
+
+    function applyTheme(light) {
+        document.body.classList.toggle('light-mode', light);
+        document.documentElement.classList.toggle('light-mode', light);
+        var icon = document.getElementById('theme-icon');
+        if (icon) icon.className = light ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+        localStorage.setItem('samv2_light', light ? '1' : '0');
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        applyTheme(isLight);
+        var btn = document.getElementById('btn-theme');
+        if (btn) {
+            btn.addEventListener('click', function() {
+                applyTheme(!document.body.classList.contains('light-mode'));
+            });
+        }
+    });
+})();
+</script>

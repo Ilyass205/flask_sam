@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration – JOGAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+    <style>
+        .mc-actions { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); flex-wrap:wrap; }
+        .mc-cameras-list { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+        .cam-chip { display:inline-flex; align-items:center; gap:5px; background:var(--accent-bg); color:var(--accent); padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+        .cam-chip button { background:none; border:none; color:var(--accent); cursor:pointer; padding:0; font-size:10px; opacity:.7; }
+        .cam-chip button:hover { opacity:1; }
+        .empty-chips { color:var(--text-muted); font-size:11.5px; font-style:italic; }
+        .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .form-input { width:100%; padding:10px 12px; background:var(--surface); border:1.5px solid var(--border); border-radius:var(--r); color:var(--text); font-family:'Barlow',sans-serif; font-size:13.5px; transition:border-color .15s; box-sizing:border-box; }
+        .form-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg); }
+        .modal-error { color:var(--red); font-size:12px; margin-bottom:10px; display:none; background:var(--red-bg); padding:8px 12px; border-radius:var(--r); }
+        .cam-table { width:100%; border-collapse:collapse; margin-top:8px; }
+        .cam-table th { background:var(--surface-2,#1e2130); color:var(--text-2); font-size:11px; text-transform:uppercase; letter-spacing:.4px; padding:8px 12px; text-align:left; }
+        .cam-table td { padding:9px 12px; border-bottom:1px solid var(--border); font-size:13px; }
+        .cam-table tr:hover td { background:var(--surface); }
+        .ip-tag { font-family:monospace; font-size:11.5px; background:var(--surface); padding:2px 7px; border-radius:4px; word-break:break-all; }
+    </style>
+</head>
+<body>
+{% include 'header.html' %}
+
+<div class="section-header">
+    <div class="section-title"><i class="fa-solid fa-gears"></i> Machines-outils</div>
+    <button class="btn btn-primary btn-sm" onclick="ouvrirModalAjout()">
+        <i class="fa-solid fa-plus"></i> Ajouter une machine
+    </button>
+</div>
+
+<div class="machines-grid" id="machines-grid">
+    {% for m in machines %}
+    <div class="machine-card" id="card-{{ m.id_machine }}">
+        <div class="mc-header">
+            <div>
+                <div class="mc-name">{{ m.nom_machine }}</div>
+                <div class="mc-type">{{ m.type_machine }}</div>
+            </div>
+            <span class="badge" id="etat-{{ m.id_machine }}" data-machine="{{ m.id_machine }}">● …</span>
+        </div>
+        <div class="mc-body">
+            <div class="mc-row">
+                <span class="mc-row-label">Emplacement</span>
+                <span>{{ m.section_emplacement or '—' }}</span>
+            </div>
+            <div class="mc-row">
+                <span class="mc-row-label">Installation</span>
+                <span>{{ m.date_installation_machine.strftime('%d/%m/%Y') if m.date_installation_machine else '—' }}</span>
+            </div>
+            <div class="mc-row">
+                <span class="mc-row-label">ID ArUco</span>
+                <span style="font-family:monospace;background:var(--surface,#1a1d23);padding:2px 8px;border-radius:4px;">{{ m.aruco_id if m.aruco_id is not none else '—' }}</span>
+            </div>
+            <div class="mc-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+                <span class="mc-row-label">Caméras liées</span>
+                <div class="mc-cameras-list" id="cams-{{ m.id_machine }}">
+                    <span class="empty-chips">Chargement…</span>
+                </div>
+            </div>
+        </div>
+        <div class="mc-actions">
+            <button class="btn btn-ghost btn-sm"
+                onclick='ouvrirModalEdit({{ m.id_machine }}, {{ m.nom_machine|tojson }}, {{ m.type_machine|tojson }}, {{ (m.date_installation_machine.strftime("%Y-%m-%d") if m.date_installation_machine else None)|tojson }}, {{ m.id_emplacement|tojson }}, {{ m.aruco_id|tojson }})'>
+                <i class="fa-solid fa-pen"></i> Modifier
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick='ouvrirModalAssoc({{ m.id_machine }}, {{ m.nom_machine|tojson }})'>
+                <i class="fa-solid fa-link"></i> Caméra
+            </button>
+            <button class="btn btn-danger btn-sm" onclick='confirmerSuppression({{ m.id_machine }}, {{ m.nom_machine|tojson }})'>
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state" style="grid-column:1/-1;">
+        <i class="fa-solid fa-gear"></i>
+        <p>Aucune machine. Cliquez sur "Ajouter" pour commencer.</p>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="section-header" style="margin-top:32px;">
+    <div class="section-title"><i class="fa-solid fa-camera"></i> Caméras</div>
+    <button class="btn btn-primary btn-sm" onclick="ouvrirModalAjoutCam()">
+        <i class="fa-solid fa-plus"></i> Ajouter une caméra
+    </button>
+</div>
+
+<div class="card" style="overflow-x:auto;">
+    <table class="cam-table">
+        <thead>
+            <tr><th>#</th><th>Nom</th><th>URL / IP</th><th>Protocole</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="cameras-tbody">
+            {% for c in cameras %}
+            <tr>
+                <td>{{ c.id_camera }}</td>
+                <td><strong>{{ c.nom_camera }}</strong></td>
+                <td><code class="ip-tag">{{ c.ip_camera }}</code></td>
+                <td>{{ c.protocole_camera }}</td>
+                <td style="display:flex;gap:6px;">
+                    <button class="btn btn-ghost btn-sm"
+                        onclick="ouvrirModalEditCam({{ c.id_camera }}, '{{ c.nom_camera|e }}', '{{ c.ip_camera|e }}', '{{ c.protocole_camera|e }}')">
+                        <i class="fa-solid fa-pen"></i> Modifier
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="supprimerCamera({{ c.id_camera }}, '{{ c.nom_camera|e }}')">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">Aucune caméra.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% include 'footer.html' %}
+
+<!-- MODALS MACHINES -->
+<div id="modal-ajout" class="modal-backdrop" onclick="fermerModal('modal-ajout',event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-plus"></i> Nouvelle machine</div>
+            <button onclick="fermerModal('modal-ajout')" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label class="form-label">Nom *</label>
+                <input id="ajout-nom" type="text" class="form-input" placeholder="Ex: Fraiseuse CNC F05">
+            </div>
+            <div class="form-field">
+                <label class="form-label">Type</label>
+                <input id="ajout-type" type="text" class="form-input" placeholder="Ex: fraiseuse">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label class="form-label">Date installation</label>
+                <input id="ajout-date" type="date" class="form-input">
+            </div>
+            <div class="form-field">
+                <label class="form-label">Emplacement *</label>
+                <select id="ajout-empl" class="form-select">
+                    {% for e in emplacements %}
+                    <option value="{{ e.id_emplacement }}">{{ e.section_emplacement }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label class="form-label">ID ArUco <span style="color:var(--text-2,#888);font-size:11px">(optionnel)</span></label>
+                <input id="ajout-aruco" type="number" min="0" class="form-input" placeholder="Ex: 0, 1, 2...">
+            </div>
+        </div>
+        <div id="ajout-error" class="modal-error"></div>
+        <div class="form-actions">
+            <button onclick="ajouterMachine()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
+            <button onclick="fermerModal('modal-ajout')" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-edit" class="modal-backdrop" onclick="fermerModal('modal-edit',event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-pen"></i> Modifier la machine</div>
+            <button onclick="fermerModal('modal-edit')" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="edit-id">
+        <div class="form-row">
+            <div class="form-field">
+                <label class="form-label">Nom *</label>
+                <input id="edit-nom" type="text" class="form-input">
+            </div>
+            <div class="form-field">
+                <label class="form-label">Type</label>
+                <input id="edit-type" type="text" class="form-input">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label class="form-label">Date installation</label>
+                <input id="edit-date" type="date" class="form-input">
+            </div>
+            <div class="form-field">
+                <label class="form-label">Emplacement *</label>
+                <select id="edit-empl" class="form-select">
+                    {% for e in emplacements %}
+                    <option value="{{ e.id_emplacement }}">{{ e.section_emplacement }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label class="form-label">ID ArUco <span style="color:var(--text-2,#888);font-size:11px">(optionnel)</span></label>
+                <input id="edit-aruco" type="number" min="0" class="form-input" placeholder="Ex: 0, 1, 2...">
+            </div>
+        </div>
+        <div id="edit-error" class="modal-error"></div>
+        <div class="form-actions">
+            <button onclick="modifierMachine()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Sauvegarder</button>
+            <button onclick="fermerModal('modal-edit')" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-assoc" class="modal-backdrop" onclick="fermerModal('modal-assoc',event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-link"></i> Lier une caméra</div>
+            <button onclick="fermerModal('modal-assoc')" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="assoc-id-machine">
+        <p id="assoc-machine-nom" style="font-size:13px;color:var(--text-2);margin-bottom:14px;"></p>
+        <div class="form-field">
+            <label class="form-label">Caméra à associer</label>
+            <select id="assoc-camera" class="form-select">
+                {% for c in cameras %}
+                <option value="{{ c.id_camera }}">{{ c.nom_camera }} — {{ c.ip_camera[:40] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div id="assoc-error" class="modal-error"></div>
+        <div class="form-actions">
+            <button onclick="ajouterAssociation()" class="btn btn-primary"><i class="fa-solid fa-link"></i> Associer</button>
+            <button onclick="fermerModal('modal-assoc')" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-suppr" class="modal-backdrop" onclick="fermerModal('modal-suppr',event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" style="color:var(--red)"><i class="fa-solid fa-triangle-exclamation"></i> Confirmer la suppression</div>
+            <button onclick="fermerModal('modal-suppr')" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <p style="font-size:13.5px;color:var(--text-2);margin-bottom:20px;">
+            Supprimer <strong id="suppr-nom"></strong> ?<br>
+            <span style="font-size:12px;color:var(--red)">⚠ L'historique et les alertes liés seront aussi supprimés.</span>
+        </p>
+        <input type="hidden" id="suppr-id">
+        <div class="form-actions">
+            <button onclick="supprimerMachine()" class="btn btn-danger"><i class="fa-solid fa-trash"></i> Supprimer définitivement</button>
+            <button onclick="fermerModal('modal-suppr')" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODALS CAMÉRAS -->
+<div id="modal-ajout-cam" class="modal-backdrop" onclick="fermerModal('modal-ajout-cam',event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-camera"></i> Nouvelle caméra</div>
+            <button onclick="fermerModal('modal-ajout-cam')" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Nom *</label>
+            <input id="cam-ajout-nom" type="text" class="form-input" placeholder="Ex: Reolink#2">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">URL / IP *</label>
+            <input id="cam-ajout-ip" type="text" class="form-input" placeholder="rtsp://... ou IP brute">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">Protocole</label>
+            <select id="cam-ajout-proto" class="form-select">
+                <option value="RTSP">RTSP</option>
+                <option value="ONVIF">ONVIF</option>
+                <option value="HTTP">HTTP</option>
+            </select>
+        </div>
+        <div id="cam-ajout-error" class="modal-error"></div>
+        <div class="form-actions">
+            <button onclick="ajouterCamera()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
+            <button onclick="fermerModal('modal-ajout-cam')" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-edit-cam" class="modal-backdrop" onclick="fermerModal('modal-edit-cam',event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-pen"></i> Modifier la caméra</div>
+            <button onclick="fermerModal('modal-edit-cam')" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="cam-edit-id">
+        <div class="form-field">
+            <label class="form-label">Nom *</label>
+            <input id="cam-edit-nom" type="text" class="form-input">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">URL / IP *</label>
+            <input id="cam-edit-ip" type="text" class="form-input">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">Protocole</label>
+            <select id="cam-edit-proto" class="form-select">
+                <option value="RTSP">RTSP</option>
+                <option value="ONVIF">ONVIF</option>
+                <option value="HTTP">HTTP</option>
+            </select>
+        </div>
+        <div id="cam-edit-error" class="modal-error"></div>
+        <div class="form-actions">
+            <button onclick="modifierCamera()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Sauvegarder</button>
+            <button onclick="fermerModal('modal-edit-cam')" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function fermerModal(id, e) {
+    var el = document.getElementById(id);
+    if (!e || e.target === el) el.classList.remove('open');
+}
+function ouvrirModal(id) { document.getElementById(id).classList.add('open'); }
+function setError(id, msg) {
+    var el = document.getElementById(id);
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+}
+
+var ETAT_MAP = {
+    marche:      ['b-prod',  '● Production'],
+    arret:       ['b-arret', '● Arrêt'],
+    maintenance: ['b-maint', '● Maintenance'],
+};
+
+function chargerEtat(el) {
+    fetch('/api/etat/' + el.dataset.machine)
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            var info = ETAT_MAP[d.etat_couleur] || ['b-unknown','● Inconnu'];
+            el.className = 'badge ' + info[0];
+            el.textContent = info[1];
+            var card = document.getElementById('card-' + el.dataset.machine);
+            if (card) {
+                card.classList.remove('mc-prod','mc-arret','mc-maint');
+                var map2 = {marche:'mc-prod', arret:'mc-arret', maintenance:'mc-maint'};
+                if (map2[d.etat_couleur]) card.classList.add(map2[d.etat_couleur]);
+            }
+        })
+        .catch(function(){ el.className='badge b-unknown'; el.textContent='● ?'; });
+}
+
+function chargerCameras(idMachine) {
+    fetch('/api/cameras')
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+            var cams = data.filter(function(d){ return d.id_machine == idMachine; });
+            var el = document.getElementById('cams-' + idMachine);
+            if (!el) return;
+            if (!cams.length) { el.innerHTML = '<span class="empty-chips">Aucune caméra liée</span>'; return; }
+            var seen = {};
+            el.innerHTML = '';
+            cams.forEach(function(c){
+                if (seen[c.id_camera]) return;
+                seen[c.id_camera] = true;
+                var chip = document.createElement('span');
+                chip.className = 'cam-chip';
+                chip.innerHTML = '<i class="fa-solid fa-camera"></i>' + c.nom_camera +
+                    ' <button title="Délier" onclick="supprimerAssoc(' + c.id_camera + ',' + idMachine + ')"><i class="fa-solid fa-xmark"></i></button>';
+                el.appendChild(chip);
+            });
+        });
+}
+
+document.querySelectorAll('[data-machine]').forEach(function(el){
+    chargerEtat(el);
+    chargerCameras(el.dataset.machine);
+});
+setInterval(function(){ document.querySelectorAll('[data-machine]').forEach(chargerEtat); }, 10000);
+
+function ouvrirModalAjout() {
+    setError('ajout-error','');
+    ['ajout-nom','ajout-type','ajout-date','ajout-aruco'].forEach(function(id){ document.getElementById(id).value = ''; });
+    ouvrirModal('modal-ajout');
+}
+function ajouterMachine() {
+    var nom   = document.getElementById('ajout-nom').value.trim();
+    var type_ = document.getElementById('ajout-type').value.trim();
+    var date  = document.getElementById('ajout-date').value;
+    var empl  = document.getElementById('ajout-empl').value;
+    var arucoVal = document.getElementById('ajout-aruco').value;
+    if (!nom) { setError('ajout-error','Le nom est obligatoire.'); return; }
+    fetch('/api/machines', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({nom:nom, type_machine:type_, date_installation:date||null, id_emplacement:parseInt(empl), aruco_id: arucoVal !== '' ? parseInt(arucoVal) : null})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.success) { fermerModal('modal-ajout'); location.reload(); }
+        else setError('ajout-error', d.message || 'Erreur.');
+    }).catch(function(){ setError('ajout-error','Erreur réseau.'); });
+}
+
+function ouvrirModalEdit(id, nom, type_, date, idEmpl, arucoId) {
+    setError('edit-error','');
+    document.getElementById('edit-id').value   = id;
+    document.getElementById('edit-nom').value  = nom;
+    document.getElementById('edit-type').value = type_;
+    document.getElementById('edit-date').value = date;
+    if (idEmpl) document.getElementById('edit-empl').value = idEmpl;
+    document.getElementById('edit-aruco').value = (arucoId !== null && arucoId !== undefined) ? arucoId : '';
+    ouvrirModal('modal-edit');
+}
+function modifierMachine() {
+    var id    = document.getElementById('edit-id').value;
+    var nom   = document.getElementById('edit-nom').value.trim();
+    var type_ = document.getElementById('edit-type').value.trim();
+    var date  = document.getElementById('edit-date').value;
+    var empl  = document.getElementById('edit-empl').value;
+    var arucoVal = document.getElementById('edit-aruco').value;
+    if (!nom) { setError('edit-error','Le nom est obligatoire.'); return; }
+    fetch('/api/machines/' + id, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({nom:nom, type_machine:type_, date_installation:date||null, id_emplacement:parseInt(empl), aruco_id: arucoVal !== '' ? parseInt(arucoVal) : null})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.success) { fermerModal('modal-edit'); location.reload(); }
+        else setError('edit-error', d.message || 'Erreur.');
+    }).catch(function(){ setError('edit-error','Erreur réseau.'); });
+}
+
+function confirmerSuppression(id, nom) {
+    document.getElementById('suppr-id').value = id;
+    document.getElementById('suppr-nom').textContent = nom;
+    ouvrirModal('modal-suppr');
+}
+function supprimerMachine() {
+    var id = document.getElementById('suppr-id').value;
+    fetch('/api/machines/' + id, {method:'DELETE'})
+        .then(function(r){ return r.json(); }).then(function(d){
+            if (d.success) { fermerModal('modal-suppr'); location.reload(); }
+            else alert('Erreur lors de la suppression.');
+        }).catch(function(){ alert('Erreur réseau.'); });
+}
+
+function ouvrirModalAssoc(idMachine, nomMachine) {
+    setError('assoc-error','');
+    document.getElementById('assoc-id-machine').value = idMachine;
+    document.getElementById('assoc-machine-nom').textContent = 'Machine : ' + nomMachine;
+    ouvrirModal('modal-assoc');
+}
+function ajouterAssociation() {
+    var idMachine = document.getElementById('assoc-id-machine').value;
+    var idCamera  = document.getElementById('assoc-camera').value;
+    fetch('/api/associations', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({id_camera:parseInt(idCamera), id_machine:parseInt(idMachine)})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.success) { fermerModal('modal-assoc'); chargerCameras(idMachine); }
+        else setError('assoc-error', d.message || 'Erreur (doublon ?)');
+    }).catch(function(){ setError('assoc-error','Erreur réseau.'); });
+}
+function supprimerAssoc(idCamera, idMachine) {
+    if (!confirm('Délier cette caméra ?')) return;
+    fetch('/api/associations/' + idCamera + '/' + idMachine, {method:'DELETE'})
+        .then(function(r){ return r.json(); }).then(function(d){
+            if (d.success) chargerCameras(idMachine);
+            else alert('Erreur lors de la dissociation.');
+        });
+}
+
+function ouvrirModalAjoutCam() {
+    setError('cam-ajout-error','');
+    ['cam-ajout-nom','cam-ajout-ip'].forEach(function(id){ document.getElementById(id).value = ''; });
+    ouvrirModal('modal-ajout-cam');
+}
+function ajouterCamera() {
+    var nom   = document.getElementById('cam-ajout-nom').value.trim();
+    var ip    = document.getElementById('cam-ajout-ip').value.trim();
+    var proto = document.getElementById('cam-ajout-proto').value;
+    if (!nom || !ip) { setError('cam-ajout-error','Nom et URL obligatoires.'); return; }
+    fetch('/api/cameras', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({nom:nom, ip:ip, protocole:proto})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.success) { fermerModal('modal-ajout-cam'); location.reload(); }
+        else setError('cam-ajout-error', d.message || 'Erreur.');
+    }).catch(function(){ setError('cam-ajout-error','Erreur réseau.'); });
+}
+
+function ouvrirModalEditCam(id, nom, ip, proto) {
+    setError('cam-edit-error','');
+    document.getElementById('cam-edit-id').value    = id;
+    document.getElementById('cam-edit-nom').value   = nom;
+    document.getElementById('cam-edit-ip').value    = ip;
+    document.getElementById('cam-edit-proto').value = proto;
+    ouvrirModal('modal-edit-cam');
+}
+function modifierCamera() {
+    var id    = document.getElementById('cam-edit-id').value;
+    var nom   = document.getElementById('cam-edit-nom').value.trim();
+    var ip    = document.getElementById('cam-edit-ip').value.trim();
+    var proto = document.getElementById('cam-edit-proto').value;
+    if (!nom || !ip) { setError('cam-edit-error','Nom et URL obligatoires.'); return; }
+    fetch('/api/cameras/' + id, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({nom:nom, ip:ip, protocole:proto})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.success) { fermerModal('modal-edit-cam'); location.reload(); }
+        else setError('cam-edit-error', d.message || 'Erreur.');
+    }).catch(function(){ setError('cam-edit-error','Erreur réseau.'); });
+}
+
+function supprimerCamera(id, nom) {
+    if (!confirm('Supprimer la caméra "' + nom + '" ?')) return;
+    fetch('/api/cameras/' + id, {method:'DELETE'})
+        .then(function(r){ return r.json(); }).then(function(d){
+            if (d.success) location.reload();
+            else alert('Erreur lors de la suppression.');
+        }).catch(function(){ alert('Erreur réseau.'); });
+}
+</script>
+</body>
+</html>

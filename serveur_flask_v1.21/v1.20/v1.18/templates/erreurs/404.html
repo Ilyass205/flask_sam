@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>404 - Page Introuvable</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body style="display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center;">
+    <div class="error-container">
+        <i class="fa-solid fa-triangle-exclamation" style="font-size: 5rem; color: var(--accent-red); margin-bottom: 20px;"></i>
+        <h1 style="font-size: 3rem;">404</h1>
+        <p style="font-size: 1.2rem; color: var(--text-muted);">Oups ! La page que vous cherchez n'existe pas dans le système.</p>
+        <div style="margin-top: 30px;">
+            <a href="{{ url_for('index') }}" class="btn-login" style="text-decoration: none; padding: 15px 30px;">
+                RETOURNER AU TABLEAU DE BORD
+            </a>
+        </div>
+    </div>
+</body>
+</html>

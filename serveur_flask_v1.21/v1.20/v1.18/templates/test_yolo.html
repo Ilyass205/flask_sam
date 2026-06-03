@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Démonstration YOLO – JOGAM SAMv2</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+    <style>
+        body { background: #0a0c10; }
+        .demo-header {
+            text-align: center; padding: 32px 24px 16px;
+        }
+        .demo-title { font-size: 28px; font-weight: 700; color: #e8eaf0; }
+        .demo-sub   { font-size: 14px; color: #6b7080; margin-top: 8px; }
+        .demo-badge {
+            display: inline-block; background: #6c8fef22; color: #6c8fef;
+            border: 1px solid #6c8fef44; border-radius: 20px;
+            padding: 4px 14px; font-size: 12px; font-weight: 700;
+            margin-top: 12px; letter-spacing: .5px;
+        }
+        .cams-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(560px, 1fr));
+            gap: 20px;
+            padding: 24px;
+            max-width: 1400px; margin: 0 auto;
+        }
+        .cam-block {
+            background: #1a1d23;
+            border: 1px solid #2a2d3a;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .cam-block-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 16px; border-bottom: 1px solid #2a2d3a;
+        }
+        .cam-name { font-size: 14px; font-weight: 700; color: #e8eaf0; }
+        .cam-id   { font-size: 11px; color: #6b7080; }
+        .cam-block img {
+            width: 100%; display: block;
+            background: #0f1117;
+        }
+        .legend {
+            display: flex; gap: 16px; padding: 10px 16px;
+            border-top: 1px solid #2a2d3a;
+        }
+        .leg-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9499b0; }
+        .leg-dot  { width: 10px; height: 10px; border-radius: 50%; }
+        .footer-note {
+            text-align: center; padding: 24px; font-size: 12px; color: #6b7080;
+        }
+    </style>
+</head>
+<body>
+
+<div class="demo-header">
+    <div class="demo-title"><i class="fa-solid fa-eye" style="color:#6c8fef"></i> Démonstration YOLO</div>
+    <div class="demo-sub">Détection en temps réel des colonnes lumineuses — JOGAM SAMv2</div>
+    <div class="demo-badge">YOLOv8n · mAP50 99.5% · Colonnes lumineuses</div>
+</div>
+
+<div class="cams-grid">
+    {% for cam in cameras %}
+    <div class="cam-block">
+        <div class="cam-block-header">
+            <span class="cam-name"><i class="fa-solid fa-camera" style="color:#6c8fef;margin-right:6px"></i>{{ cam.nom_camera }}</span>
+            <span class="cam-id">Caméra #{{ cam.id_camera }}</span>
+        </div>
+        <!-- Le flux MJPEG avec les bounding boxes dessinées par YOLO -->
+        <img src="{{ url_for('test_yolo_feed', id_camera=cam.id_camera) }}"
+             alt="Flux YOLO caméra {{ cam.id_camera }}"
+             loading="lazy">
+        <div class="legend">
+            <div class="leg-item"><div class="leg-dot" style="background:#00ff00"></div> Vert = Marche</div>
+            <div class="leg-item"><div class="leg-dot" style="background:#ff0000"></div> Rouge = Arrêt</div>
+            <div class="leg-item"><div class="leg-dot" style="background:#00d2ff"></div> Jaune = Maintenance</div>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align:center;color:#6b7080;padding:48px;grid-column:1/-1;">
+        <i class="fa-solid fa-video-slash" style="font-size:32px;opacity:.4;display:block;margin-bottom:12px"></i>
+        Aucune caméra configurée.
+    </div>
+    {% endfor %}
+</div>
+
+<div class="footer-note">
+    Page accessible via <code>/test_yolo</code> — Projet BTS CIEL IR – JOGAM Composants 2026
+</div>
+
+</body>
+</html>

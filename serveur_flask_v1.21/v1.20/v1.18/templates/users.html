@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Utilisateurs – JOGAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+    <style>
+        /* Badges de rôle colorés */
+        .role-badge      { display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+        .role-admin      { background:#3b2fcb22; color:#7c6fef; }
+        .role-technicien { background:#1b8a4c22; color:#3ecf74; }
+        .role-superviseur{ background:#e6510022; color:#f5a63a; }
+        .form-input      { width:100%; padding:10px 12px; background:var(--surface); border:1.5px solid var(--border); border-radius:var(--r); color:var(--text); font-size:13.5px; box-sizing:border-box; }
+        .modal-error     { color:var(--red); font-size:12px; margin-bottom:10px; display:none; background:var(--red-bg); padding:8px 12px; border-radius:var(--r); }
+        .perms-list      { display:flex; flex-wrap:wrap; gap:4px; }
+        .perm-chip       { font-size:11px; background:var(--surface-2); color:var(--text-2); padding:2px 8px; border-radius:20px; }
+    </style>
+</head>
+<body>
+{% include 'header.html' %}
+
+<div class="section-header">
+    <div class="section-title"><i class="fa-solid fa-users"></i> Gestion des utilisateurs</div>
+    <!-- Bouton ajout visible uniquement pour les admins -->
+    {% if session.get('role') == 'admin' %}
+    <button class="btn btn-primary btn-sm" onclick="ouvrirModalAjout()">
+        <i class="fa-solid fa-plus"></i> Nouvel utilisateur
+    </button>
+    {% endif %}
+</div>
+
+<div class="card" style="overflow-x:auto;">
+    <table class="supervision-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Login</th>
+                <th>Rôle</th>
+                <th>Permissions</th>
+                {% if session.get('role') == 'admin' %}
+                <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.id_user }}</td>
+                <td>
+                    <strong>{{ u.login_user }}</strong>
+                    {% if u.login_user == session['utilisateur'] %}
+                    <span style="font-size:10px;color:var(--accent);margin-left:6px;">(vous)</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="role-badge role-{{ u.role_user }}">{{ u.role_user }}</span>
+                </td>
+                <td>
+                    <div class="perms-list">
+                        {% if u.role_user == 'admin' %}
+                            <span class="perm-chip">Accès complet</span>
+                            <span class="perm-chip">Config machines</span>
+                            <span class="perm-chip">Config caméras</span>
+                            <span class="perm-chip">Gestion users</span>
+                        {% elif u.role_user == 'technicien' %}
+                            <span class="perm-chip">Voir caméras</span>
+                            <span class="perm-chip">Changer état machines</span>
+                            <span class="perm-chip">Voir rapports</span>
+                        {% else %}
+                            <span class="perm-chip">Lecture seule</span>
+                            <span class="perm-chip">Dashboard</span>
+                            <span class="perm-chip">Rapports</span>
+                        {% endif %}
+                    </div>
+                </td>
+                {% if session.get('role') == 'admin' %}
+                <td style="display:flex;gap:6px;">
+                    <!-- Bouton modifier -->
+                    <button class="btn btn-ghost btn-sm"
+                        onclick="ouvrirModalEdit({{ u.id_user }}, '{{ u.login_user }}', '{{ u.role_user }}')">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <!-- Bouton supprimer — désactivé pour son propre compte -->
+                    {% if u.login_user != session['utilisateur'] %}
+                    <button class="btn btn-danger btn-sm"
+                        onclick="supprimerUser({{ u.id_user }}, '{{ u.login_user }}')">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                    {% else %}
+                    <button class="btn btn-ghost btn-sm" disabled title="Impossible de supprimer son propre compte"
+                        style="opacity:.3;cursor:not-allowed;">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                    {% endif %}
+                </td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Aucun utilisateur.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% include 'footer.html' %}
+
+<!-- ── MODAL AJOUT ──────────────────────────────────────────── -->
+<div id="modal-ajout" class="modal-backdrop" onclick="fermerModal('modal-ajout',event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-user-plus"></i> Nouvel utilisateur</div>
+            <button onclick="fermerModal('modal-ajout')" class="btn btn-ghost btn-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Login *</label>
+            <input id="ajout-login" type="text" class="form-input" placeholder="Ex: jean.dupont">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">Mot de passe *</label>
+            <input id="ajout-mdp" type="password" class="form-input">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">Rôle *</label>
+            <select id="ajout-role" class="form-select">
+                <option value="technicien">Technicien — Voir cams + changer état</option>
+                <option value="superviseur">Superviseur — Lecture seule + rapports</option>
+                <option value="admin">Admin — Accès complet</option>
+            </select>
+        </div>
+        <div id="ajout-error" class="modal-error"></div>
+        <div class="form-actions">
+            <button onclick="ajouterUser()" class="btn btn-primary">
+                <i class="fa-solid fa-floppy-disk"></i> Créer
+            </button>
+            <button onclick="fermerModal('modal-ajout')" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── MODAL EDIT ───────────────────────────────────────────── -->
+<div id="modal-edit" class="modal-backdrop" onclick="fermerModal('modal-edit',event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-pen"></i> Modifier l'utilisateur</div>
+            <button onclick="fermerModal('modal-edit')" class="btn btn-ghost btn-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <input type="hidden" id="edit-id">
+        <div class="form-field">
+            <label class="form-label">Login *</label>
+            <input id="edit-login" type="text" class="form-input">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">
+                Nouveau mot de passe
+                <span style="color:var(--text-muted);font-size:11px;">(laisser vide = inchangé)</span>
+            </label>
+            <input id="edit-mdp" type="password" class="form-input" placeholder="••••••••">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">Rôle *</label>
+            <select id="edit-role" class="form-select">
+                <option value="technicien">Technicien</option>
+                <option value="superviseur">Superviseur</option>
+                <option value="admin">Admin</option>
+            </select>
+        </div>
+        <div id="edit-error" class="modal-error"></div>
+        <div class="form-actions">
+            <button onclick="modifierUser()" class="btn btn-primary">
+                <i class="fa-solid fa-floppy-disk"></i> Sauvegarder
+            </button>
+            <button onclick="fermerModal('modal-edit')" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function fermerModal(id, e) {
+    var el = document.getElementById(id);
+    if (!e || e.target === el) el.classList.remove('open');
+}
+function ouvrirModal(id) { document.getElementById(id).classList.add('open'); }
+function setError(id, msg) {
+    var el = document.getElementById(id);
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+}
+
+function ouvrirModalAjout() {
+    setError('ajout-error', '');
+    ['ajout-login', 'ajout-mdp'].forEach(function(id) {
+        document.getElementById(id).value = '';
+    });
+    ouvrirModal('modal-ajout');
+}
+
+function ajouterUser() {
+    var login = document.getElementById('ajout-login').value.trim();
+    var mdp   = document.getElementById('ajout-mdp').value.trim();
+    var role  = document.getElementById('ajout-role').value;
+    if (!login || !mdp) { setError('ajout-error', 'Login et mot de passe obligatoires.'); return; }
+    fetch('/api/users', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({login: login, mdp: mdp, role: role})
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.success) { fermerModal('modal-ajout'); location.reload(); }
+        else setError('ajout-error', d.message || 'Erreur.');
+    }).catch(function() { setError('ajout-error', 'Erreur réseau.'); });
+}
+
+function ouvrirModalEdit(id, login, role) {
+    setError('edit-error', '');
+    document.getElementById('edit-id').value    = id;
+    document.getElementById('edit-login').value = login;
+    document.getElementById('edit-role').value  = role;
+    document.getElementById('edit-mdp').value   = '';
+    ouvrirModal('modal-edit');
+}
+
+function modifierUser() {
+    var id    = document.getElementById('edit-id').value;
+    var login = document.getElementById('edit-login').value.trim();
+    var role  = document.getElementById('edit-role').value;
+    var mdp   = document.getElementById('edit-mdp').value.trim();
+    if (!login) { setError('edit-error', 'Login obligatoire.'); return; }
+    fetch('/api/users/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({login: login, role: role, mdp: mdp || null})
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.success) { fermerModal('modal-edit'); location.reload(); }
+        else setError('edit-error', d.message || 'Erreur.');
+    }).catch(function() { setError('edit-error', 'Erreur réseau.'); });
+}
+
+function supprimerUser(id, login) {
+    if (!confirm('Supprimer l\'utilisateur "' + login + '" ?')) return;
+    fetch('/api/users/' + id, {method: 'DELETE'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) location.reload();
+            else alert(d.message || 'Erreur.');
+        });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caméras en direct – JOGAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+    {% include 'header.html' %}
+
+    <div class="page-body">
+        <div class="section-header">
+            <div class="section-title">Flux vidéo en temps réel</div>
+            <button onclick="ouvrirModalAjout()" class="btn btn-primary btn-sm">
+                <i class="fa-solid fa-plus"></i> Ajouter une caméra
+            </button>
+        </div>
+
+        <div class="camera-grid">
+            {% for cam in cameras %}
+            <div class="cam-card">
+                <div class="cam-video-wrap">
+                    <img src="{{ url_for('video_feed', id_camera=cam.id_camera) }}" alt="Flux {{ cam.nom_camera }}">
+                    <div class="vid-ovl-tl">{{ cam.nom_camera }}</div>
+                    <div class="live-badge">LIVE</div>
+                    <div class="vid-ovl-br"><code class="mono" style="font-size:10px;">{{ cam.ip_camera[:30] }}{% if cam.ip_camera|length > 30 %}…{% endif %}</code></div>
+                </div>
+                <div class="cam-info">
+                    <div>
+                        <div class="cam-name">{{ cam.nom_camera }}</div>
+                        <div class="cam-sub"><span class="badge-proto p-rtsp">{{ cam.protocole_camera }}</span></div>
+                    </div>
+                    <div class="btn-group">
+                        <a href="{{ url_for('view_camera', id_camera=cam.id_camera) }}" class="btn btn-ghost btn-sm" title="Détail">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </a>
+                        <button onclick="supprimerCamera({{ cam.id_camera }})" class="btn btn-danger btn-sm" title="Supprimer">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state" style="grid-column: 1/-1;">
+                <i class="fa-solid fa-camera-slash"></i>
+                <p>Aucune caméra configurée.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Modal d'ajout de caméra -->
+    <div id="modal-ajout" class="modal-backdrop" onclick="fermerModalAjout(event)">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Ajouter une caméra</div>
+                <button onclick="fermerModalAjout()" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Nom de la caméra</label>
+                <input type="text" id="cam-nom" class="form-input" placeholder="Caméra Atelier Nord">
+            </div>
+            <div class="form-field">
+                <label class="form-label">URL RTSP complète</label>
+                <input type="text" id="cam-url" class="form-input" placeholder="rtsp://user:pass@ip:554/stream">
+                <small class="text-muted">Exemple : rtsp://admin:password@172.16.4.113:554/h264Preview_01_main</small>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Protocole</label>
+                <select id="cam-protocole" class="form-select">
+                    <option value="RTSP">RTSP</option>
+                    <option value="ONVIF">ONVIF</option>
+                    <option value="MJPEG">MJPEG</option>
+                </select>
+            </div>
+            <div id="modal-ajout-error" class="modal-error" style="display:none;"></div>
+            <div class="form-actions">
+                <button onclick="ajouterCamera()" class="btn btn-primary">Ajouter</button>
+                <button onclick="fermerModalAjout()" class="btn btn-ghost">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function ouvrirModalAjout() {
+            document.getElementById('modal-ajout').classList.add('open');
+        }
+        function fermerModalAjout(e) {
+            if (e && e.target !== document.getElementById('modal-ajout')) return;
+            document.getElementById('modal-ajout').classList.remove('open');
+            document.getElementById('modal-ajout-error').style.display = 'none';
+        }
+        function ajouterCamera() {
+            const nom = document.getElementById('cam-nom').value.trim();
+            const url = document.getElementById('cam-url').value.trim();
+            const protocole = document.getElementById('cam-protocole').value;
+            if (!nom || !url) {
+                const errDiv = document.getElementById('modal-ajout-error');
+                errDiv.textContent = 'Nom et URL requis.';
+                errDiv.style.display = 'block';
+                return;
+            }
+            fetch('/api/cameras', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ nom, ip: url, protocole })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    const errDiv = document.getElementById('modal-ajout-error');
+                    errDiv.textContent = data.message;
+                    errDiv.style.display = 'block';
+                }
+            })
+            .catch(() => {
+                const errDiv = document.getElementById('modal-ajout-error');
+                errDiv.textContent = 'Erreur réseau.';
+                errDiv.style.display = 'block';
+            });
+        }
+        function supprimerCamera(id) {
+            if (!confirm('Supprimer définitivement cette caméra ?')) return;
+            fetch(`/api/cameras/${id}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) location.reload();
+                    else alert(data.message);
+                })
+                .catch(() => alert('Erreur réseau.'));
+        }
+    </script>
+
+    {% include 'footer.html' %}
+</body>
+</html>

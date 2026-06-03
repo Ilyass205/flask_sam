@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ camera.nom_camera if camera else 'Caméra' }} – JOGAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+    <style>
+        /* ── Layout principal ─────────────────────────────────── */
+        .cam-layout {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            grid-template-rows: auto 1fr;
+            gap: 16px;
+            align-items: start;
+        }
+        @media(max-width:960px) { .cam-layout { grid-template-columns:1fr; } }
+
+        /* ── Flux vidéo ───────────────────────────────────────── */
+        .video-wrapper {
+            position: relative;
+            background: #000;
+            border-radius: var(--rl);
+            overflow: hidden;
+            border: 1px solid var(--border);
+            grid-row: 1 / 3;
+        }
+        .video-wrapper img { width:100%; display:block; }
+
+        .vid-badge {
+            position:absolute; top:10px; left:10px;
+            display:flex; gap:6px; align-items:center;
+        }
+        .vid-live {
+            background:rgba(220,38,38,.9); color:#fff; font-size:10px;
+            font-weight:700; padding:3px 9px; border-radius:20px;
+            display:flex; align-items:center; gap:4px;
+        }
+        .vid-live::before {
+            content:''; width:5px; height:5px; background:#fff;
+            border-radius:50%; animation:pulse 1.2s ease-in-out infinite;
+        }
+        .vid-proto {
+            background:rgba(0,0,0,.6); color:rgba(255,255,255,.8);
+            font-size:10px; font-weight:600; padding:3px 8px;
+            border-radius:20px; font-family:'JetBrains Mono',monospace;
+        }
+
+        .vid-overlay-top-right {
+            position:absolute; top:10px; right:42px;
+            background:rgba(0,0,0,.6); backdrop-filter:blur(4px);
+            color:rgba(255,255,255,.9); font-size:10px;
+            padding:4px 10px; border-radius:6px;
+            font-family:'JetBrains Mono',monospace;
+            display:flex; flex-direction:column; gap:2px; text-align:right;
+        }
+
+        .vid-stats {
+            position:absolute; bottom:10px; right:10px;
+            background:rgba(0,0,0,.5); color:rgba(255,255,255,.65);
+            font-size:9px; padding:3px 8px; border-radius:4px;
+            font-family:'JetBrains Mono',monospace;
+            display:flex; gap:8px;
+        }
+
+        .vid-etat-overlay {
+            position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+            background:rgba(0,0,0,.72); backdrop-filter:blur(8px);
+            border-radius:40px; padding:7px 20px;
+            border:1px solid rgba(255,255,255,.1);
+            display:flex; flex-direction:column; align-items:center; gap:2px;
+            min-width:180px;
+        }
+        .vid-etat-row { display:flex; align-items:center; gap:8px; }
+        .vid-etat-dot  { width:11px; height:11px; border-radius:50%; animation:etat-pulse 1.8s ease-in-out infinite; }
+        .vid-etat-text { font-size:14px; font-weight:700; color:#fff; text-transform:uppercase; font-family:'Barlow Condensed',sans-serif; }
+        .vid-etat-sub  { font-size:9px; color:rgba(255,255,255,.5); font-family:'JetBrains Mono',monospace; }
+        @keyframes etat-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+
+        .etat-marche      .vid-etat-dot { background:#3ecf74; }
+        .etat-marche      .vid-etat-text { color:#3ecf74; }
+        .etat-arret       .vid-etat-dot { background:#f07575; }
+        .etat-arret       .vid-etat-text { color:#f07575; }
+        .etat-maintenance .vid-etat-dot { background:#f5a63a; }
+        .etat-maintenance .vid-etat-text { color:#f5a63a; }
+        .etat-inconnu     .vid-etat-dot { background:#888; animation:none; }
+
+        .vid-fs-btn {
+            position:absolute; top:10px; right:10px;
+            background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.15);
+            color:rgba(255,255,255,.85); border-radius:6px;
+            width:28px; height:28px; cursor:pointer;
+            display:flex; align-items:center; justify-content:center; font-size:11px;
+        }
+        .vid-fs-btn:hover { background:rgba(255,255,255,.2); }
+
+        /* ── Panneau droite ───────────────────────────────────── */
+        .side-panel { display:flex; flex-direction:column; gap:12px; }
+
+        /* ── Onglets machines ─────────────────────────────────── */
+        .machine-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:4px; }
+        .machine-tab {
+            display:flex; align-items:center; gap:6px;
+            padding:6px 12px; border-radius:8px; cursor:pointer;
+            border:1.5px solid var(--border); background:var(--surface);
+            color:var(--text-2); font-size:12px; transition:all .15s;
+        }
+        .machine-tab:hover { border-color:var(--accent); color:var(--text); }
+        .machine-tab.active { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); font-weight:600; }
+        .tab-dot { width:7px; height:7px; border-radius:50%; background:var(--text-muted); flex-shrink:0; }
+        .machine-tab.active .tab-dot { background:var(--accent); }
+
+        /* ── Info card compacte ───────────────────────────────── */
+        .ic { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:12px 14px; }
+        .ic-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+        .ic-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--border); font-size:12.5px; }
+        .ic-row:last-child { border-bottom:none; }
+        .ic-label { color:var(--text-2); flex-shrink:0; margin-right:8px; }
+        .ic-val { color:var(--text); text-align:right; word-break:break-all; }
+
+        /* ── PTZ ──────────────────────────────────────────────── */
+        .ptz-grid { display:grid; grid-template-columns:repeat(3,38px); grid-template-rows:repeat(3,38px); gap:3px; margin:8px auto 0; width:fit-content; }
+        .ptz-btn { width:38px; height:38px; border-radius:7px; border:1.5px solid var(--border); background:var(--surface); color:var(--text); font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s; }
+        .ptz-btn:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+        .ptz-btn:active { transform:scale(.92); }
+        .ptz-stop { background:var(--red-bg); border-color:var(--red); color:var(--red); font-size:10px; font-weight:700; }
+
+        /* ── Toggles ──────────────────────────────────────────── */
+        .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); font-size:12.5px; }
+        .toggle-row:last-child { border-bottom:none; }
+        .toggle { position:relative; width:38px; height:22px; }
+        .toggle input { opacity:0; width:0; height:0; }
+        .toggle-slider { position:absolute; cursor:pointer; inset:0; background:var(--border); border-radius:22px; transition:.3s; }
+        .toggle-slider:before { content:''; position:absolute; width:16px; height:16px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.3s; }
+        input:checked + .toggle-slider { background:var(--accent); }
+        input:checked + .toggle-slider:before { transform:translateX(16px); }
+
+        /* ── Historique ───────────────────────────────────────── */
+        .histo-table { width:100%; border-collapse:collapse; font-size:12px; }
+        .histo-table th { background:var(--surface-2); color:var(--text-muted); font-size:10px; text-transform:uppercase; padding:6px 10px; text-align:left; }
+        .histo-table td { padding:6px 10px; border-bottom:1px solid var(--border); }
+        .histo-table tr:last-child td { border-bottom:none; }
+        .histo-table tr:hover td { background:var(--surface); }
+
+        /* ── Modal ────────────────────────────────────────────── */
+        .modal-error { color:var(--red); font-size:12px; margin-bottom:8px; display:none; background:var(--red-bg); padding:7px 10px; border-radius:var(--r); }
+    </style>
+</head>
+<body>
+{% include 'header.html' %}
+
+{% if camera %}
+
+<!-- Fil d'Ariane + titre -->
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+    <a href="{{ url_for('cameras_direct') }}" class="btn btn-ghost btn-sm">
+        <i class="fa fa-arrow-left"></i> Retour
+    </a>
+    <div style="display:flex;align-items:center;gap:8px;">
+        <i class="fa-solid fa-camera" style="color:var(--text-muted);"></i>
+        <span style="font-size:15px;font-weight:700;">{{ camera.nom_camera }}</span>
+        <span class="badge b-prod" style="font-size:9px;">LIVE</span>
+    </div>
+</div>
+
+<!-- Sélecteur machines si plusieurs -->
+{% if machines and machines|length > 1 %}
+<div class="machine-tabs" id="machine-tabs" style="margin-bottom:12px;">
+    {% for m in machines %}
+    <div class="machine-tab {% if loop.first %}active{% endif %}"
+         onclick="changerMachine({{ m.id_machine }}, {{ m.nom_machine|tojson }}, {{ m.aruco_id|tojson }}, this)"
+         data-id="{{ m.id_machine }}">
+        <span class="tab-dot"></span>
+        <span>{{ m.nom_machine }}</span>
+        {% if m.aruco_id is not none %}
+        <span style="font-size:9px;opacity:.55;font-family:monospace;">ArUco#{{ m.aruco_id }}</span>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="cam-layout">
+
+    <!-- ── FLUX VIDÉO ─────────────────────────────────────────── -->
+    <div class="video-wrapper" id="video-wrapper">
+        <img id="video-stream"
+             src="{{ url_for('video_feed', id_camera=camera.id_camera) }}"
+             alt="Flux" style="width:100%;display:block;" onload="onFrameLoad()">
+
+        <!-- Badge LIVE + protocole -->
+        <div class="vid-badge">
+            <div class="vid-live">LIVE</div>
+            <span class="vid-proto">{{ camera.protocole_camera }}</span>
+        </div>
+
+        <!-- Infos cam + machine en haut à droite -->
+        <div class="vid-overlay-top-right">
+            <span><i class="fa-solid fa-camera"></i> {{ camera.nom_camera }} #{{ camera.id_camera }}</span>
+            <span id="vid-machine-info">
+                {% if machine %}
+                <i class="fa-solid fa-gear"></i> {{ machine.nom_machine }}{% if machine.aruco_id is not none %} · ArUco#{{ machine.aruco_id }}{% endif %}
+                {% endif %}
+            </span>
+        </div>
+
+        <!-- État machine superposé sur le flux -->
+        {% if machine %}
+        <div class="vid-etat-overlay etat-inconnu" id="etat-overlay">
+            <div class="vid-etat-row">
+                <span class="vid-etat-dot"></span>
+                <span class="vid-etat-text" id="etat-label">…</span>
+            </div>
+            <div class="vid-etat-sub" id="etat-depuis"></div>
+        </div>
+        {% endif %}
+
+        <!-- Stats flux bas droite -->
+        <div class="vid-stats">
+            <span>854×480</span>
+            <span id="stat-fps">— fps</span>
+            <span id="stat-lat">— ms</span>
+        </div>
+
+        <!-- Bouton plein écran -->
+        <button class="vid-fs-btn" onclick="toggleFullscreen()" title="Plein écran">
+            <i class="fa-solid fa-expand" id="fs-icon"></i>
+        </button>
+    </div>
+
+    <!-- ── PANNEAU DROITE ──────────────────────────────────────── -->
+    <div class="side-panel">
+
+        <!-- Caméra + Machine en une seule carte compacte -->
+        <div class="ic">
+            <div class="ic-title"><i class="fa-solid fa-circle-info"></i> Caméra & Machine</div>
+            <div class="ic-row"><span class="ic-label">Caméra</span><span class="ic-val">{{ camera.nom_camera }} <span style="color:var(--text-muted)">#{{ camera.id_camera }}</span></span></div>
+            <div class="ic-row"><span class="ic-label">Protocole</span><span class="ic-val">{{ camera.protocole_camera }}</span></div>
+            <div class="ic-row"><span class="ic-label">Résolution</span><span class="ic-val">854 × 480 · <span id="card-fps">—</span> · <span id="card-lat">—</span></span></div>
+            {% if machine %}
+            <div class="ic-row"><span class="ic-label">Machine</span><strong class="ic-val" id="m-nom">{{ machine.nom_machine }}</strong></div>
+            <div class="ic-row"><span class="ic-label">Type</span><span class="ic-val" id="m-type">{{ machine.type_machine or '—' }}</span></div>
+            <div class="ic-row"><span class="ic-label">Zone</span><span class="ic-val" id="m-empl">{{ machine.section_emplacement or '—' }}</span></div>
+            <div class="ic-row">
+                <span class="ic-label">ArUco</span>
+                <span class="ic-val" id="m-aruco" style="font-family:monospace;">{% if machine.aruco_id is not none %}#{{ machine.aruco_id }}{% else %}—{% endif %}</span>
+            </div>
+            <div class="ic-row">
+                <span class="ic-label">État</span>
+                <span class="badge" id="badge-etat-card">● …</span>
+            </div>
+            {% endif %}
+            <div class="ic-row"><span class="ic-label">Opérateur</span><span class="ic-val"><i class="fa-solid fa-user-circle" style="margin-right:4px;"></i>{{ session['utilisateur'] }}</span></div>
+        </div>
+
+        <!-- Actions machine -->
+        {% if machine %}
+        <button onclick="ouvrirModalEtat()" class="btn btn-primary btn-sm" style="width:100%;">
+            <i class="fa-solid fa-pen"></i> Changer l'état manuellement
+        </button>
+        {% endif %}
+
+        <!-- Contrôle caméra -->
+        <div class="ic">
+            <div class="ic-title"><i class="fa-solid fa-gamepad"></i> Contrôle PTZ & IR</div>
+            <div class="ptz-grid">
+                <div></div>
+                <button class="ptz-btn" onmousedown="ptz('Up')" onmouseup="ptz('Stop')"><i class="fa-solid fa-chevron-up"></i></button>
+                <div></div>
+                <button class="ptz-btn" onmousedown="ptz('Left')" onmouseup="ptz('Stop')"><i class="fa-solid fa-chevron-left"></i></button>
+                <button class="ptz-btn ptz-stop" onclick="ptz('Stop')">■</button>
+                <button class="ptz-btn" onmousedown="ptz('Right')" onmouseup="ptz('Stop')"><i class="fa-solid fa-chevron-right"></i></button>
+                <div></div>
+                <button class="ptz-btn" onmousedown="ptz('Down')" onmouseup="ptz('Stop')"><i class="fa-solid fa-chevron-down"></i></button>
+                <div></div>
+            </div>
+            <div style="margin-top:8px;">
+                <div class="toggle-row">
+                    <span><i class="fa-solid fa-moon" style="margin-right:5px;color:var(--text-muted);"></i>Mode nuit IR</span>
+                    <label class="toggle"><input type="checkbox" id="toggle-ir" onchange="setIR(this.checked)"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="toggle-row">
+                    <span><i class="fa-solid fa-lightbulb" style="margin-right:5px;color:var(--text-muted);"></i>Flash LED</span>
+                    <label class="toggle"><input type="checkbox" id="toggle-led" onchange="setLED(this.checked)"><span class="toggle-slider"></span></label>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /side-panel -->
+
+</div><!-- /cam-layout -->
+
+<!-- Historique pleine largeur en dessous -->
+{% if machine %}
+<div class="ic" style="margin-top:16px;">
+    <div class="ic-title" style="margin-bottom:8px;">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        Historique — <span id="histo-titre">{{ machine.nom_machine }}</span>
+    </div>
+    <div style="overflow-x:auto;max-height:280px;overflow-y:auto;">
+        <table class="histo-table">
+            <thead><tr><th>Horodatage</th><th>État</th></tr></thead>
+            <tbody id="historique-tbody">
+                <tr><td colspan="2" style="text-align:center;color:var(--text-muted);padding:12px;">Chargement…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state"><i class="fa-solid fa-video-slash"></i><p>Caméra introuvable.</p></div>
+{% endif %}
+
+{% include 'footer.html' %}
+
+<!-- ── MODAL ÉTAT ──────────────────────────────────────────── -->
+<div id="modal-etat" class="modal-backdrop" onclick="if(event.target===this)fermerModalEtat()">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Changer l'état — <span id="modal-machine-nom">{{ machine.nom_machine if machine else '' }}</span></div>
+            <button onclick="fermerModalEtat()" class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Nouvel état</label>
+            <select id="select-couleur" class="form-select">
+                <option value="3">Vert — En marche</option>
+                <option value="1">Rouge — Arrêt</option>
+                <option value="2">Orange — Maintenance</option>
+            </select>
+        </div>
+        <div id="modal-etat-error" class="modal-error"></div>
+        <div class="form-actions">
+            <button onclick="confirmerChangementEtat()" class="btn btn-primary">Confirmer</button>
+            <button onclick="fermerModalEtat()" class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var MACHINES  = {{ machines|tojson if machines else '[]' }};
+var ID_CAMERA = {{ camera.id_camera if camera else 0 }};
+var ID_MACHINE= {{ machine.id_machine if machine else 0 }};
+
+// ── Sélecteur machine ─────────────────────────────────────────
+function changerMachine(idMachine, nomMachine, arucoId, tabEl) {
+    ID_MACHINE = idMachine;
+    document.querySelectorAll('.machine-tab').forEach(function(t){ t.classList.remove('active'); });
+    if (tabEl) tabEl.classList.add('active');
+
+    var m = MACHINES.find(function(x){ return x.id_machine == idMachine; });
+    if (m) {
+        var set = function(id, v){ var el=document.getElementById(id); if(el) el.textContent=v; };
+        set('m-nom',  m.nom_machine);
+        set('m-type', m.type_machine || '—');
+        set('m-empl', m.section_emplacement || '—');
+        set('m-aruco', m.aruco_id !== null ? '#'+m.aruco_id : '—');
+    }
+    var vi = document.getElementById('vid-machine-info');
+    if (vi) vi.innerHTML = '<i class="fa-solid fa-gear"></i> '+nomMachine+(arucoId!==null?' · ArUco#'+arucoId:'');
+    var ht = document.getElementById('histo-titre'); if(ht) ht.textContent = nomMachine;
+    var mn = document.getElementById('modal-machine-nom'); if(mn) mn.textContent = nomMachine;
+    chargerEtat(); chargerHistorique();
+}
+
+// ── FPS ───────────────────────────────────────────────────────
+var _ff=0,_fl=Date.now(),_ls=0;
+function onFrameLoad(){
+    var n=Date.now(); _ff++;
+    if(n-_fl>=1000){
+        var fps=Math.round(_ff*1000/(n-_fl)), lat=n-_ls;
+        _ff=0; _fl=n;
+        var s=fps+' fps', l=lat+' ms';
+        ['stat-fps','card-fps'].forEach(function(id){var e=document.getElementById(id);if(e)e.textContent=s;});
+        ['stat-lat','card-lat'].forEach(function(id){var e=document.getElementById(id);if(e)e.textContent=l;});
+    }
+    _ls=n;
+}
+var _si=document.getElementById('video-stream');
+if(_si) _si.addEventListener('load',onFrameLoad);
+
+// ── État machine ──────────────────────────────────────────────
+var ETAT_CFG = {
+    marche:      {cls:'etat-marche',      label:'En marche',   badge:'b-prod',  txt:'● Production'},
+    arret:       {cls:'etat-arret',       label:'Arrêt',       badge:'b-arret', txt:'● Arrêt'},
+    maintenance: {cls:'etat-maintenance', label:'Maintenance', badge:'b-maint', txt:'● Maintenance'},
+};
+function chargerEtat(){
+    if(!ID_MACHINE) return;
+    fetch('/api/etat/'+ID_MACHINE).then(function(r){return r.json();}).then(function(d){
+        var cfg=ETAT_CFG[d.etat_couleur]||{cls:'etat-inconnu',label:'Inconnu',badge:'b-unknown',txt:'● Inconnu'};
+        var ov=document.getElementById('etat-overlay');
+        if(ov){
+            ov.className='vid-etat-overlay '+cfg.cls;
+            document.getElementById('etat-label').textContent=cfg.label;
+            var dep=document.getElementById('etat-depuis');
+            if(dep&&d.horodatage_evenement) dep.textContent='Depuis '+new Date(d.horodatage_evenement).toLocaleString('fr-FR');
+        }
+        var b=document.getElementById('badge-etat-card');
+        if(b){b.className='badge '+cfg.badge;b.textContent=cfg.txt;}
+        var dot=document.querySelector('.machine-tab.active .tab-dot');
+        if(dot){var dc={'etat-marche':'#3ecf74','etat-arret':'#f07575','etat-maintenance':'#f5a63a'};dot.style.background=dc[cfg.cls]||'var(--text-muted)';}
+    }).catch(function(){});
+}
+if(ID_MACHINE){chargerEtat();setInterval(chargerEtat,4000);}
+
+// ── Historique ────────────────────────────────────────────────
+var BM={arret:'b-arret',marche:'b-prod',maintenance:'b-maint'};
+function chargerHistorique(){
+    if(!ID_MACHINE) return;
+    fetch('/api/historique/'+ID_MACHINE).then(function(r){return r.json();}).then(function(data){
+        var tb=document.getElementById('historique-tbody');
+        if(!tb) return;
+        if(!data.length){tb.innerHTML='<tr><td colspan="2" style="text-align:center;color:var(--text-muted);padding:12px;">Aucun événement.</td></tr>';return;}
+        tb.innerHTML=data.map(function(h){
+            var b=BM[h.etat_couleur]||'b-unknown';
+            return '<tr><td style="font-family:monospace;font-size:11.5px;">'+new Date(h.horodatage_evenement).toLocaleString('fr-FR')+'</td><td><span class="badge '+b+'">● '+h.nom_couleur+'</span></td></tr>';
+        }).join('');
+    }).catch(function(){});
+}
+if(ID_MACHINE){chargerHistorique();setInterval(chargerHistorique,5000);}
+
+// ── Modal état ────────────────────────────────────────────────
+function ouvrirModalEtat(){document.getElementById('modal-etat').classList.add('open');}
+function fermerModalEtat(){document.getElementById('modal-etat').classList.remove('open');document.getElementById('modal-etat-error').style.display='none';}
+function confirmerChangementEtat(){
+    fetch('/api/evenements',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id_machine:ID_MACHINE,id_couleur:parseInt(document.getElementById('select-couleur').value)})
+    }).then(function(r){return r.json();}).then(function(d){
+        if(d.success){fermerModalEtat();chargerEtat();chargerHistorique();}
+        else{var e=document.getElementById('modal-etat-error');e.textContent=d.message||'Erreur.';e.style.display='block';}
+    });
+}
+
+// ── PTZ / IR / LED ────────────────────────────────────────────
+function ptz(op){fetch('/api/cameras/'+ID_CAMERA+'/ptz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({op:op,speed:25})});}
+function setIR(c){fetch('/api/cameras/'+ID_CAMERA+'/ir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:c?'Auto':'Off'})});}
+function setLED(c){fetch('/api/cameras/'+ID_CAMERA+'/led',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:c?'On':'Off'})});}
+function chargerEtatCam(){
+    fetch('/api/cameras/'+ID_CAMERA+'/ir').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('toggle-ir');if(e)e.checked=d.state==='Auto';}).catch(function(){var e=document.getElementById('toggle-ir');if(e)e.checked=false;});
+    fetch('/api/cameras/'+ID_CAMERA+'/led').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('toggle-led');if(e)e.checked=d.state==='On';}).catch(function(){var e=document.getElementById('toggle-led');if(e)e.checked=false;});
+}
+chargerEtatCam();
+
+// ── Plein écran ───────────────────────────────────────────────
+function toggleFullscreen(){
+    var w=document.getElementById('video-wrapper'),ic=document.getElementById('fs-icon');
+    if(!document.fullscreenElement){w.requestFullscreen().then(function(){ic.className='fa-solid fa-compress';});}
+    else{document.exitFullscreen().then(function(){ic.className='fa-solid fa-expand';});}
+}
+</script>
+</body>
+</html>

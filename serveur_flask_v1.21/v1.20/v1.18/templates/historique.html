@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historique des événements – JOGAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+    {% include 'header.html' %}
+
+    <div class="page-body">
+        <div class="section-header">
+            <div class="section-title">Historique des changements d'état</div>
+        </div>
+
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date & heure</th>
+                        <th>Machine</th>
+                        <th>Type</th>
+                        <th>État</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for evt in evenements %}
+                    <tr>
+                        <td class="mono">{{ evt.horodatage_evenement.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                        <td><strong>{{ evt.nom_machine }}</strong><br><small>{{ evt.type_machine }}</small></td>
+                        <td>{{ evt.type_machine }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if evt.etat_couleur == 'marche' %}b-prod
+                                {% elif evt.etat_couleur == 'arret' %}b-arret
+                                {% elif evt.etat_couleur == 'maintenance' %}b-maint
+                                {% else %}b-unknown{% endif %}">
+                                ● {{ evt.nom_couleur }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="empty-state">Aucun événement enregistré.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% include 'footer.html' %}
+</body>
+</html>

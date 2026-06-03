@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alertes – JOGAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body>
+{% include 'header.html' %}
+
+<div class="section-header">
+    <div class="section-title"><i class="fa-solid fa-bell"></i> Alertes</div>
+    <button class="btn btn-primary btn-sm" onclick="ouvrirModal()">
+        <i class="fa-solid fa-plus"></i> Nouvelle alerte
+    </button>
+</div>
+
+<div class="card" style="overflow-x:auto;">
+    <table class="supervision-table" id="table-alertes">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Machine</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in alertes %}
+            <tr id="alerte-{{ a.id_alerte }}">
+                <td>{{ a.id_alerte }}</td>
+                <td style="font-family:monospace">
+                    {{ a.date_alerte.strftime('%d/%m/%Y %H:%M') if a.date_alerte else '—' }}
+                </td>
+                <td>
+                    <span class="badge b-arret">
+                        <i class="fa-solid fa-triangle-exclamation"></i> {{ a.type_alerte }}
+                    </span>
+                </td>
+                <td>{{ a.nom_machine }}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm"
+                        onclick="supprimerAlerte({{ a.id_alerte }})">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+            {% else %}
+            <tr id="empty-row">
+                <td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">
+                    Aucune alerte enregistrée.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% include 'footer.html' %}
+
+<!-- Modal ajout alerte -->
+<div id="modal-alerte" class="modal-backdrop" onclick="fermerModal(event)">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-bell"></i> Nouvelle alerte</div>
+            <button onclick="document.getElementById('modal-alerte').classList.remove('open')"
+                class="btn btn-ghost btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Type d'alerte *</label>
+            <input id="alerte-type" type="text" class="form-input"
+                placeholder="Ex: Arrêt inattendu, Maintenance préventive...">
+        </div>
+        <div class="form-field" style="margin-top:10px;">
+            <label class="form-label">Machine concernée *</label>
+            <select id="alerte-machine" class="form-select">
+                {% for m in machines %}
+                <option value="{{ m.id_machine }}">{{ m.nom_machine }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div id="alerte-error" style="color:var(--red);font-size:12px;display:none;
+            background:var(--red-bg);padding:8px 12px;border-radius:6px;margin-top:10px;"></div>
+        <div class="form-actions">
+            <button onclick="ajouterAlerte()" class="btn btn-primary">
+                <i class="fa-solid fa-floppy-disk"></i> Enregistrer
+            </button>
+            <button onclick="document.getElementById('modal-alerte').classList.remove('open')"
+                class="btn btn-ghost">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function ouvrirModal() {
+    document.getElementById('alerte-type').value = '';
+    document.getElementById('alerte-error').style.display = 'none';
+    document.getElementById('modal-alerte').classList.add('open');
+}
+
+function fermerModal(e) {
+    const el = document.getElementById('modal-alerte');
+    if (e.target === el) el.classList.remove('open');
+}
+
+function ajouterAlerte() {
+    const type_alerte = document.getElementById('alerte-type').value.trim();
+    const id_machine  = document.getElementById('alerte-machine').value;
+    const errEl       = document.getElementById('alerte-error');
+
+    if (!type_alerte) {
+        errEl.textContent = 'Le type d\'alerte est obligatoire.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    fetch('/api/alertes/ajouter', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({type_alerte, id_machine: parseInt(id_machine)})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            document.getElementById('modal-alerte').classList.remove('open');
+            location.reload();
+        } else {
+            errEl.textContent = d.message || 'Erreur lors de l\'ajout.';
+            errEl.style.display = 'block';
+        }
+    })
+    .catch(() => {
+        errEl.textContent = 'Erreur réseau.';
+        errEl.style.display = 'block';
+    });
+}
+
+function supprimerAlerte(id) {
+    if (!confirm('Supprimer cette alerte ?')) return;
+    fetch(`/api/alertes/${id}`, {method: 'DELETE'})
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            // Supprimer la ligne du tableau sans recharger la page
+            const row = document.getElementById(`alerte-${id}`);
+            if (row) row.remove();
+        } else {
+            alert('Erreur lors de la suppression.');
+        }
+    })
+    .catch(() => alert('Erreur réseau.'));
+}
+</script>
+</body>
+</html>

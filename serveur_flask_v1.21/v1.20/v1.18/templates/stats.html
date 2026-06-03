@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistiques – JOGAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+        .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        @media(max-width:800px){ .stats-grid{grid-template-columns:1fr;} }
+        .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--rl); padding:20px; }
+        .chart-title { font-size:13px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:.5px; margin-bottom:16px; }
+        .chart-wrap { position:relative; height:260px; }
+        .trs-bar { height:10px; background:var(--border); border-radius:5px; overflow:hidden; margin-top:4px; }
+        .trs-fill { height:100%; border-radius:5px; background:var(--accent); }
+    </style>
+</head>
+<body>
+{% include 'header.html' %}
+
+<div class="section-header">
+    <div class="section-title"><i class="fa-solid fa-chart-line"></i> Statistiques & Analytique</div>
+    <span style="font-size:12px;color:var(--text-muted)">7 derniers jours</span>
+</div>
+
+<!-- KPIs -->
+<div class="stats-kpi" id="kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+    <div class="stat-card"><div class="stat-icon si-blue"><i class="fa-solid fa-camera"></i></div><div class="stat-info"><div class="stat-value" id="k-cams">—</div><div class="stat-label">Caméras</div></div></div>
+    <div class="stat-card"><div class="stat-icon si-green"><i class="fa-solid fa-gears"></i></div><div class="stat-info"><div class="stat-value" id="k-machines">—</div><div class="stat-label">Machines</div></div></div>
+    <div class="stat-card"><div class="stat-icon si-orange"><i class="fa-solid fa-gauge-high"></i></div><div class="stat-info"><div class="stat-value" id="k-trs">—%</div><div class="stat-label">TRS Moyen</div></div></div>
+    <div class="stat-card"><div class="stat-icon si-red"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="stat-info"><div class="stat-value" id="k-alertes">—</div><div class="stat-label">Alertes 24h</div></div></div>
+</div>
+
+<div class="stats-grid">
+    <!-- Répartition états -->
+    <div class="chart-card">
+        <div class="chart-title"><i class="fa-solid fa-chart-pie"></i> Répartition des états (7j)</div>
+        <div class="chart-wrap"><canvas id="chart-etats"></canvas></div>
+    </div>
+
+    <!-- Événements par jour -->
+    <div class="chart-card">
+        <div class="chart-title"><i class="fa-solid fa-chart-line"></i> Événements par jour (14j)</div>
+        <div class="chart-wrap"><canvas id="chart-evts"></canvas></div>
+    </div>
+
+    <!-- TRS par machine -->
+    <div class="chart-card" style="grid-column:1/-1;">
+        <div class="chart-title"><i class="fa-solid fa-chart-bar"></i> TRS par machine (7j)</div>
+        <div class="chart-wrap" style="height:300px;"><canvas id="chart-machines"></canvas></div>
+    </div>
+</div>
+
+{% include 'footer.html' %}
+
+<script>
+const COLORS = {
+    marche:      '#3ecf74',
+    arret:       '#f07575',
+    maintenance: '#f5a63a',
+};
+
+// KPIs
+fetch('/api/stats/dashboard').then(r=>r.json()).then(d => {
+    document.getElementById('k-cams').textContent    = d.nb_cameras;
+    document.getElementById('k-machines').textContent = d.nb_machines;
+    document.getElementById('k-trs').textContent      = d.trs + '%';
+    document.getElementById('k-alertes').textContent  = d.nb_alertes;
+});
+
+// Graphique camembert — répartition états
+fetch('/api/stats/etats').then(r=>r.json()).then(data => {
+    new Chart(document.getElementById('chart-etats'), {
+        type: 'doughnut',
+        data: {
+            labels: data.map(d => d.nom_couleur),
+            datasets: [{
+                data:            data.map(d => d.nb),
+                backgroundColor: data.map(d => COLORS[d.etat_couleur] || '#888'),
+                borderWidth:     2,
+                borderColor:     '#1a1d23',
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { color: '#aaa', padding: 16 } }
+            }
+        }
+    });
+});
+
+// Graphique courbe — événements par jour
+fetch('/api/stats/evenements').then(r=>r.json()).then(data => {
+    new Chart(document.getElementById('chart-evts'), {
+        type: 'line',
+        data: {
+            labels: data.map(d => d.jour),
+            datasets: [{
+                label:           'Événements',
+                data:            data.map(d => d.nb),
+                borderColor:     '#6c8fef',
+                backgroundColor: 'rgba(108,143,239,0.15)',
+                tension:         0.4,
+                fill:            true,
+                pointRadius:     4,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { ticks: { color: '#888' }, grid: { color: '#2a2d3a' } },
+                y: { ticks: { color: '#888' }, grid: { color: '#2a2d3a' }, beginAtZero: true }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+});
+
+// Graphique barres — TRS par machine
+fetch('/api/stats/machines').then(r=>r.json()).then(data => {
+    new Chart(document.getElementById('chart-machines'), {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.nom_machine),
+            datasets: [
+                { label: 'En marche',    data: data.map(d => d.marche),      backgroundColor: '#3ecf74' },
+                { label: 'Arrêt',        data: data.map(d => d.arret),       backgroundColor: '#f07575' },
+                { label: 'Maintenance',  data: data.map(d => d.maintenance),  backgroundColor: '#f5a63a' },
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true, ticks: { color: '#888' }, grid: { color: '#2a2d3a' } },
+                y: { stacked: true, ticks: { color: '#888' }, grid: { color: '#2a2d3a' }, beginAtZero: true }
+            },
+            plugins: { legend: { position: 'bottom', labels: { color: '#aaa' } } }
+        }
+    });
+});
+</script>
+</body>
+</html>

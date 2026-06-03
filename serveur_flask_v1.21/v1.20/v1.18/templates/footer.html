@@ -1,0 +1,33 @@
+</div><!-- /page-body -->
+</div><!-- /main-content -->
+
+<script>
+// ── HORLOGE ──────────────────────────────────────────
+function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+        now.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── MODE SOMBRE ───────────────────────────────────────
+const btnTheme = document.getElementById('btn-theme');
+const themeIcon = document.getElementById('theme-icon');
+
+function applyTheme(dark) {
+    document.body.classList.toggle('dark-mode', dark);
+    themeIcon.className = dark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    localStorage.setItem('darkMode', dark ? '1' : '0');
+}
+
+// Charger préférence sauvegardée
+const savedDark = localStorage.getItem('darkMode');
+if (savedDark === '1' || (savedDark === null && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    applyTheme(true);
+}
+
+btnTheme.addEventListener('click', () => {
+    applyTheme(!document.body.classList.contains('dark-mode'));
+});
+</script>
