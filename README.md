@@ -106,6 +106,25 @@ python main.py
 
 Le serveur démarre sur `0.0.0.0:5000` et affiche les URLs locale et réseau.
 
+### Lancement avec Docker
+
+Copiez `.env.docker.example` vers `.env`, remplacez les secrets, puis démarrez la stack :
+
+```bash
+docker compose up --build
+```
+
+Le conteneur applicatif démarre avec Gunicorn sur le port `APP_PORT` (5000 par défaut).
+Le nombre de workers est volontairement fixé à `1` par défaut, car le worker YOLO et
+les threads caméra gardent de l'état en mémoire dans le processus Python.
+
+Le Dockerfile installe `requirements.docker.txt` sans résolution automatique des
+dépendances afin de garder `cv2` fourni par `opencv-contrib-python-headless`, requis
+pour les marqueurs ArUco, au lieu de laisser Ultralytics ajouter `opencv-python`.
+
+Le service MySQL de `docker-compose.yml` crée la base cible, mais le schéma complet
+doit être importé séparément si la base est neuve.
+
 ---
 
 ## Référence API

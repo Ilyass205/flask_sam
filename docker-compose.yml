@@ -1,0 +1,47 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: flask-sam:local
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    environment:
+      DB_HOST: ${DOCKER_DB_HOST:-db}
+      DB_USER: ${DB_USER:-technicien}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-samv2}
+      DB_PORT: ${DB_PORT:-3306}
+      DEFAULT_RTSP_USER: ${DEFAULT_RTSP_USER:-admin}
+      DEFAULT_RTSP_PASS: ${DEFAULT_RTSP_PASS:-}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      API_BASE_URL: ${API_BASE_URL:-http://127.0.0.1:5000}
+      FLASK_DEBUG: ${FLASK_DEBUG:-False}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-samv2}
+      MYSQL_USER: ${DB_USER:-technicien}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:
