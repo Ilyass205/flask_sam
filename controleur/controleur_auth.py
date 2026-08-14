@@ -11,6 +11,15 @@ Rôles et droits :
 
 from flask import render_template, request, session, redirect, url_for, jsonify
 from modele.supervision_auth import a_permission
+from controleur.validators import (
+    ValidationError,
+    get_json_payload,
+    normalise_string,
+    require_choice,
+    validation_message,
+    valide_login,
+    valide_mot_de_passe,
+)
 
 
 class ControleurAuth:
@@ -38,8 +47,14 @@ class ControleurAuth:
         Si les credentials sont bons → session créée et redirection vers le dashboard.
         Sinon → page login avec message d'erreur.
         """
+        champs_autorises = {'login', 'password'}
+        if set(request.form.keys()) - champs_autorises:
+            return render_template("login.html", erreur="Formulaire invalide"), 400
+
         identifiant  = request.form.get("login", "").strip()
         mot_de_passe = request.form.get("password", "")
+        if not valide_login(identifiant) or not mot_de_passe:
+            return render_template("login.html", erreur="Identifiants incorrects"), 400
         print(f"[LOGIN] login='{identifiant}'")
 
         from modele.Supervision import Supervision
@@ -103,15 +118,18 @@ class ControleurAuth:
         if not self._check('tout'):
             return jsonify({"success": False, "message": "Accès refusé"}), 403
 
-        data  = request.get_json(silent=True) or {}
-        login = data.get('login', '').strip()
-        mdp   = data.get('mdp', '').strip()
-        role  = data.get('role', 'technicien')
+        try:
+            data  = get_json_payload(request, {'login', 'mdp', 'role'}, {'login', 'mdp'})
+            login = normalise_string(data.get('login'), 'login', min_len=3, max_len=50)
+            mdp   = normalise_string(data.get('mdp'), 'mdp', min_len=8, max_len=128)
+            role  = require_choice(data.get('role', 'technicien'), 'role', ['admin', 'technicien', 'superviseur'])
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
 
-        if not login or not mdp:
-            return jsonify({"success": False, "message": "Login et mdp requis"}), 400
-        if role not in ['admin', 'technicien', 'superviseur']:
-            return jsonify({"success": False, "message": "Rôle invalide"}), 400
+        if not valide_login(login):
+            return jsonify({"success": False, "message": "Login invalide"}), 400
+        if not valide_mot_de_passe(mdp):
+            return jsonify({"success": False, "message": "Mot de passe invalide"}), 400
 
         from modele.Supervision import Supervision
         ok = Supervision(self.mysql).ajouter_user(login, mdp, role)
@@ -126,15 +144,19 @@ class ControleurAuth:
         if not self._check('tout'):
             return jsonify({"success": False, "message": "Accès refusé"}), 403
 
-        data  = request.get_json(silent=True) or {}
-        login = data.get('login', '').strip()
-        role  = data.get('role', 'technicien')
-        mdp   = data.get('mdp', '').strip() or None  # None = pas de changement de mdp
+        try:
+            data  = get_json_payload(request, {'login', 'role', 'mdp'}, {'login'})
+            login = normalise_string(data.get('login'), 'login', min_len=3, max_len=50)
+            role  = require_choice(data.get('role', 'technicien'), 'role', ['admin', 'technicien', 'superviseur'])
+            mdp_raw = data.get('mdp')
+            mdp = None if mdp_raw in (None, '') else normalise_string(mdp_raw, 'mdp', min_len=8, max_len=128)
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
 
-        if not login:
-            return jsonify({"success": False, "message": "Login requis"}), 400
-        if role not in ['admin', 'technicien', 'superviseur']:
-            return jsonify({"success": False, "message": "Rôle invalide"}), 400
+        if not valide_login(login):
+            return jsonify({"success": False, "message": "Login invalide"}), 400
+        if mdp is not None and not valide_mot_de_passe(mdp):
+            return jsonify({"success": False, "message": "Mot de passe invalide"}), 400
 
         from modele.Supervision import Supervision
         ok = Supervision(self.mysql).modifier_user(id_user, login, role, mdp)

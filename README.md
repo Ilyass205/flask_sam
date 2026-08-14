@@ -61,7 +61,7 @@ Le worker YOLO est un thread unique qui traite les frames de toutes les caméras
 ```bash
 git clone https://github.com/Ilyass205/flask_sam.git
 cd flask_sam
-pip install flask flask-mysqldb python-dotenv opencv-python ultralytics requests
+pip install -r requirements.txt
 ```
 
 ### Configuration
@@ -81,6 +81,12 @@ DEFAULT_RTSP_PASS=votremotdepasse
 SECRET_KEY=changer-cette-cle-secrete
 API_BASE_URL=http://127.0.0.1:5000
 FLASK_DEBUG=False
+
+# Activer en production derriere HTTPS
+SESSION_COOKIE_SECURE=False
+TRUST_PROXY_HEADERS=False
+ENABLE_HSTS=False
+HSTS_MAX_AGE=31536000
 ```
 
 ### Base de données

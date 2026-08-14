@@ -18,7 +18,15 @@ Nota bene:
 
 from flask import render_template, jsonify, request
 from modele.Supervision import Supervision
-from controleur.validators import valide_id
+from controleur.validators import (
+    ValidationError,
+    get_json_payload,
+    normalise_int,
+    normalise_string,
+    validation_message,
+    valide_id,
+    valide_nom,
+)
 
 
 class ControleurEvent:
@@ -159,13 +167,14 @@ class ControleurEvent:
         Body JSON requis:
             {
               "id_machine": 1,
-              "id_couleur": 3     (1=Rouge, 2=Orange, 3=Vert)
+              "id_couleur": 3     (1=Rouge, 2=Orange, 3=Vert, 4=Éteint)
             }
         
         Couleurs:
             1 = Rouge (arrêt)
             2 = Orange (maintenance)
             3 = Vert (marche normal)
+            4 = Éteint
         
         Logique:
             1. Vérifier paramètres (id_machine, id_couleur)
@@ -184,16 +193,15 @@ class ControleurEvent:
             - Timestamp créé côté BDD (NOT NULL DEFAULT NOW())
             - Pas d'horodatage client (éviter sync issues)
         """
-        data = request.get_json(silent=True) or {}
-        id_machine = data.get('id_machine')
-        id_couleur = data.get('id_couleur')
-        
-        # Vérifier paramètres
-        if not id_machine or not id_couleur:
-            return jsonify({
-                "success": False,
-                "message": "id_machine et id_couleur requis"
-            }), 400
+        try:
+            data = get_json_payload(request, {'id_machine', 'id_couleur'}, {'id_machine', 'id_couleur'})
+            id_machine = normalise_int(data.get('id_machine'), 'id_machine')
+            id_couleur = normalise_int(data.get('id_couleur'), 'id_couleur', min_value=1, max_value=4)
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
+        if not valide_id(id_machine) or not valide_id(id_couleur):
+            return jsonify({"success": False, "message": "IDs invalides"}), 400
         
         # Insérer en BDD
         model = Supervision(self.mysql)
@@ -279,14 +287,17 @@ class ControleurEvent:
 
     def api_ajouter_alerte(self):
         """API POST /api/alertes/ajouter — Crée une nouvelle alerte."""
-        from flask import request, jsonify
-        data       = request.get_json(silent=True) or {}
-        type_alerte = data.get('type_alerte', '').strip()
-        id_machine  = data.get('id_machine')
-        if not type_alerte or not id_machine:
-            return jsonify({"success": False, "message": "type et machine requis"}), 400
+        try:
+            data = get_json_payload(request, {'type_alerte', 'id_machine'}, {'type_alerte', 'id_machine'})
+            type_alerte = normalise_string(data.get('type_alerte'), 'type_alerte', min_len=3, max_len=80)
+            id_machine  = normalise_int(data.get('id_machine'), 'id_machine')
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
+        if not valide_nom(type_alerte, min_len=3, max_len=80) or not valide_id(id_machine):
+            return jsonify({"success": False, "message": "Données alerte invalides"}), 400
         model = Supervision(self.mysql)
-        ok    = model.ajouter_alerte(type_alerte, int(id_machine))
+        ok    = model.ajouter_alerte(type_alerte, id_machine)
         return jsonify({"success": ok})
 
     def api_supprimer_alerte(self, id_alerte):

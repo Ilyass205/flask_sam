@@ -1,7 +1,16 @@
 # coding: utf-8
 from flask import render_template, jsonify, request, Response
 from modele.Supervision import Supervision
-from controleur.validators import valide_ip, valide_nom, valide_protocole
+from controleur.validators import (
+    ValidationError,
+    get_json_payload,
+    normalise_string,
+    require_choice,
+    validation_message,
+    valide_ip,
+    valide_nom,
+    valide_protocole,
+)
 
 
 class ControleurCamera:
@@ -81,23 +90,33 @@ class ControleurCamera:
         return jsonify(self._serialise(cameras))
 
     def api_ajouter_camera(self):
-        data  = request.get_json(silent=True) or {}
-        nom   = data.get('nom')
-        ip    = data.get('ip')
-        proto = data.get('protocole', 'RTSP')
-        if not nom or not ip:
-            return jsonify({"success": False, "message": "nom et ip requis"}), 400
+        try:
+            data  = get_json_payload(request, {'nom', 'ip', 'protocole'}, {'nom', 'ip'})
+            nom   = normalise_string(data.get('nom'), 'nom', min_len=3, max_len=50)
+            ip    = normalise_string(data.get('ip'), 'ip', min_len=3, max_len=255)
+            proto = require_choice(data.get('protocole', 'RTSP'), 'protocole', ['RTSP', 'ONVIF', 'HTTP'])
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
+        if not valide_nom(nom) or not valide_ip(ip) or not valide_protocole(proto):
+            return jsonify({"success": False, "message": "Données caméra invalides"}), 400
+
         model = Supervision(self.mysql)
         ok    = model.ajouter_camera(nom, ip, proto)
         return jsonify({"success": ok})
 
     def api_modifier_camera(self, id_camera):
-        data  = request.get_json(silent=True) or {}
-        nom   = data.get('nom')
-        ip    = data.get('ip')
-        proto = data.get('protocole', 'RTSP')
-        if not nom or not ip:
-            return jsonify({"success": False, "message": "nom et ip requis"}), 400
+        try:
+            data  = get_json_payload(request, {'nom', 'ip', 'protocole'}, {'nom', 'ip'})
+            nom   = normalise_string(data.get('nom'), 'nom', min_len=3, max_len=50)
+            ip    = normalise_string(data.get('ip'), 'ip', min_len=3, max_len=255)
+            proto = require_choice(data.get('protocole', 'RTSP'), 'protocole', ['RTSP', 'ONVIF', 'HTTP'])
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
+        if not valide_nom(nom) or not valide_ip(ip) or not valide_protocole(proto):
+            return jsonify({"success": False, "message": "Données caméra invalides"}), 400
+
         self.cam_mgr.stop(id_camera)
         self.detecteur.stop(id_camera)
         model = Supervision(self.mysql)

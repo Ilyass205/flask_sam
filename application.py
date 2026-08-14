@@ -1,9 +1,10 @@
 # coding: utf-8
-from flask import Flask
+from flask import Flask, request
 from flask_mysqldb import MySQL
 from datetime import timedelta
 from modele.camera_manager import CameraManager
 from modele.detecteur_couleur import DetecteurCouleur
+from werkzeug.middleware.proxy_fix import ProxyFix
 import config
 
 
@@ -11,6 +12,8 @@ class Application:
 
     def __init__(self):
         self.app = Flask(__name__, template_folder='./templates', static_folder='./static')
+        if config.TRUST_PROXY_HEADERS:
+            self.app.wsgi_app = ProxyFix(self.app.wsgi_app, x_for=1, x_proto=1, x_host=1)
         self.app.config.update(config.FLASK_CONFIG)
         self.app.permanent_session_lifetime = timedelta(seconds=config.PERMANENT_SESSION_LIFETIME)
         self.mysql     = MySQL()
@@ -35,7 +38,14 @@ class Application:
         def before_request():
             return cp.test_before_request(publiques)
 
+        @app.after_request
+        def after_request(response):
+            return self._appliquer_headers_securite(response)
+
+        app.register_error_handler(400, cp.erreur_400)
+        app.register_error_handler(403, cp.erreur_403)
         app.register_error_handler(404, cp.erreur_404)
+        app.register_error_handler(405, cp.erreur_405)
         app.register_error_handler(500, cp.erreur_500)
 
         # ── Auth ─────────────────────────────────────────────────
@@ -119,3 +129,34 @@ class Application:
     def run(self, host='0.0.0.0', port=5000):
         # CORRECTION : debug=False en production (était debug=True)
         self.app.run(host=host, port=port, debug=config.FLASK_DEBUG, use_reloader=False)
+
+    def _appliquer_headers_securite(self, response):
+        csp = (
+            "default-src 'self'; "
+            "base-uri 'self'; "
+            "object-src 'none'; "
+            "frame-ancestors 'none'; "
+            "form-action 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+            "font-src 'self' data: https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
+            "img-src 'self' data: blob:; "
+            "connect-src 'self'; "
+            "media-src 'self' blob:"
+        )
+        response.headers.setdefault('Content-Security-Policy', csp)
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault(
+            'Permissions-Policy',
+            'camera=(), microphone=(), geolocation=(), payment=(), usb=(), '
+            'accelerometer=(), gyroscope=(), magnetometer=()'
+        )
+        if self.app.config.get('ENABLE_HSTS') or request.is_secure:
+            max_age = self.app.config.get('HSTS_MAX_AGE', 31536000)
+            response.headers.setdefault(
+                'Strict-Transport-Security',
+                f'max-age={max_age}; includeSubDomains'
+            )
+        return response

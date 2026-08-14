@@ -17,7 +17,13 @@ Pourquoi séparé:
 
 from flask import jsonify, request
 from modele.Supervision import Supervision
-from controleur.validators import valide_id, valide_ip, valide_protocole
+from controleur.validators import (
+    ValidationError,
+    get_json_payload,
+    normalise_int,
+    validation_message,
+    valide_id,
+)
 
 
 class ControleurAssociation:
@@ -72,16 +78,15 @@ class ControleurAssociation:
         from flask import session
         if session.get('role') not in ('admin', 'technicien'):
             return jsonify({"success": False, "message": "Accès refusé"}), 403
-        data = request.get_json(silent=True) or {}
-        id_camera = data.get('id_camera')
-        id_machine = data.get('id_machine')
-        
-        # Vérifier paramètres
-        if not id_camera or not id_machine:
-            return jsonify({
-                "success": False,
-                "message": "id_camera et id_machine requis"
-            }), 400
+        try:
+            data = get_json_payload(request, {'id_camera', 'id_machine'}, {'id_camera', 'id_machine'})
+            id_camera = normalise_int(data.get('id_camera'), 'id_camera')
+            id_machine = normalise_int(data.get('id_machine'), 'id_machine')
+        except ValidationError as exc:
+            return jsonify(validation_message(str(exc))), 400
+
+        if not valide_id(id_camera) or not valide_id(id_machine):
+            return jsonify({"success": False, "message": "IDs invalides"}), 400
         
         # Ajouter association en BDD
         model = Supervision(self.mysql)

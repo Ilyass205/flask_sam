@@ -83,13 +83,14 @@ class SupervisionMachine(_Base):
             print(f"[MACHINE] get_machines_par_camera({id_camera}) : {e}")
             return []
 
-    def ajouter_machine(self, nom, type_m, date_install, id_emplacement):
+    def ajouter_machine(self, nom, type_m, date_install, id_emplacement, aruco_id=None):
         try:
             cur = self._cursor()
             cur.execute(
                 "INSERT INTO machine (nom_machine, type_machine, "
-                "date_installation_machine, id_emplacement) VALUES (%s,%s,%s,%s)",
-                (nom, type_m, date_install, id_emplacement)
+                "date_installation_machine, id_emplacement, aruco_id) "
+                "VALUES (%s,%s,%s,%s,%s)",
+                (nom, type_m, date_install, id_emplacement, aruco_id)
             )
             self._commit()
             new_id = cur.lastrowid
@@ -99,14 +100,14 @@ class SupervisionMachine(_Base):
             print(f"[MACHINE] ajouter_machine : {e}")
             return None
 
-    def modifier_machine(self, id_machine, nom, type_m, date_install, id_emplacement):
+    def modifier_machine(self, id_machine, nom, type_m, date_install, id_emplacement, aruco_id=None):
         try:
             cur = self._cursor()
             cur.execute(
                 "UPDATE machine SET nom_machine=%s, type_machine=%s, "
-                "date_installation_machine=%s, id_emplacement=%s "
+                "date_installation_machine=%s, id_emplacement=%s, aruco_id=%s "
                 "WHERE id_machine=%s",
-                (nom, type_m, date_install, id_emplacement, id_machine)
+                (nom, type_m, date_install, id_emplacement, aruco_id, id_machine)
             )
             self._commit()
             cur.close()
