@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile Python sources
+        run: |
+          python - <<'PY'
+          import pathlib
+          import py_compile
+
+          for path in pathlib.Path(".").rglob("*.py"):
+              if any(part.startswith(".") for part in path.parts):
+                  continue
+              py_compile.compile(str(path), doraise=True)
+          PY
+
+      - name: Audit pinned dependencies
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          if [ -f requirements.docker.txt ]; then
+            python -m pip_audit -r requirements.docker.txt --disable-pip --no-deps
+          elif [ -f requirements.txt ]; then
+            python -m pip_audit -r requirements.txt --disable-pip --no-deps
+          else
+            echo "No requirements file found; skipping dependency audit."
+          fi
+
+  docker:
+    name: Docker checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate Compose file
+        run: |
+          if [ ! -f docker-compose.yml ]; then
+            echo "No docker-compose.yml found; skipping Compose validation."
+            exit 0
+          fi
+
+          DB_PASSWORD=test \
+          MYSQL_ROOT_PASSWORD=root \
+          SECRET_KEY=test-secret \
+          docker compose config
+
+      - name: Build Docker image
+        run: |
+          if [ ! -f Dockerfile ]; then
+            echo "No Dockerfile found; skipping Docker build."
+            exit 0
+          fi
+
+          docker build -t flask-sam:ci .
